@@ -1,0 +1,22 @@
+{
+  "name": "ws",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "tsc -b",
+    "build":"node dist/index.js",
+    "dev":"node run start && node run build"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "@types/redis": "^4.0.10",
+    "@types/ws": "^8.18.1",
+    "redis": "^5.8.2",
+    "typescript": "^5.9.2",
+    "ws": "^8.18.3"
+  }
+}
