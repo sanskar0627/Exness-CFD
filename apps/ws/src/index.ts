@@ -8,7 +8,7 @@ const redis = createClient({ url: "redis://redis_service:6379" }); // this is fo
 const websocket = new WebSocketServer({ port: 8080 });
 
 //Key is websocket connection and value is the price of BTC, ETH, SOL and all, helps to get which client wants which price
-const client = new Map<WebSocket, Set<string>>();
+const client = new Map<WebSocket, Set<string>>();//To make a new one, you write new Map()
 
 //The number of coins we will publish for now, in real app this comes from database
 export const Channels = ["SOL", "ETH", "BTC"];
