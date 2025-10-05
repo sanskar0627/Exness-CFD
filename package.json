@@ -1,5 +1,5 @@
 {
-  "name": "Exness Cfd",
+  "name": "exness_cfd",
   "private": true,
   "scripts": {
     "build": "turbo run build",
