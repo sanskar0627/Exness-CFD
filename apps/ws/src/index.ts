@@ -2,7 +2,7 @@ import { createClient } from "redis";
 import { WebSocket, WebSocketServer } from "ws";
 
 //The url points to redis instance running the same docker network
-const redis = createClient({ url: "redis://redis_service:6379" }); // this is for docker to run locally redish basically
+const redis = createClient({ url: "redis://localhost:6379" }); // this is for docker to run locally redish basically
 
 //starting websocket on port8080
 const websocket = new WebSocketServer({ port: 8080 });
@@ -20,13 +20,23 @@ const start = async () => {
 
     //whenever the price of coins will change then this callback function will call
     Channels.forEach((ch) => {
-      redis.subscribe(ch, (data) => {
-        client.forEach((symbs, ws: WebSocket) => {
-          //if the client has subscribed to current symbol, forward the redis message to that client
-          if (symbs.has(ch) && ws.readyState === WebSocket.OPEN) {
-            ws.send(data);
-          }
-        });
+      redis.subscribe(ch, (data: string) => {
+        try {
+          client.forEach((symbs, ws: WebSocket) => {
+            //if the client has subscribed to current symbol, forward the redis message to that client
+            if (symbs.has(ch) && ws.readyState === WebSocket.OPEN) {
+              try {
+                ws.send(data);
+              } catch (sendError) {
+                console.error(`❌ Failed to send to client:`, sendError);
+                // Remove dead connection
+                client.delete(ws);
+              }
+            }
+          });
+        } catch (error) {
+          console.error(`❌ Error processing Redis message for ${ch}:`, error);
+        }
       });
     });
   } catch (error) {
@@ -43,7 +53,7 @@ websocket.on("connection", (ws: WebSocket) => {
   console.log("New WebSocket connection established");
 
   // checking which message is coming from client for which symbol he wants or he wants to subscribe or unsubscribe
-  ws.on("message", (msg) => {
+  ws.on("message", (msg: any) => {
     try {
       const message = JSON.parse(msg.toString());
 
@@ -85,7 +95,7 @@ websocket.on("connection", (ws: WebSocket) => {
   });
 
   // Handle WebSocket errors
-  ws.on("error", (error) => {
+  ws.on("error", (error: any) => {
     console.error("WebSocket error:", error);
     client.delete(ws);
   });

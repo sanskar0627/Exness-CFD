@@ -1,4 +1,4 @@
-import { WebSocket } from "ws";
+import { WebSocket, WebSocketServer } from "ws";
 import { toInternalPrice } from "./utils.js";
 import { pushToRedis, setupRedis } from "./redisops.js";
 import { saveTradeBatch } from "./dbops.js";
@@ -33,7 +33,7 @@ async function main() {
     );
   });
 
-  ws.on("message", async (data) => {
+  ws.on("message", async (data: any) => {
     try {
       const msg = JSON.parse(data.toString());
       if (msg.e === "aggTrade") {
@@ -61,7 +61,7 @@ async function main() {
     }
   });
 
-  ws.on("error", (err) => console.error("❌ Binance error:", err));
+  ws.on("error", (err: any) => console.error("❌ Binance error:", err));
   ws.on("close", () => {
     console.log("⚠️ Binance stream closed - attempting reconnect...");
     setTimeout(() => main(), 5000); // Reconnect after 5 seconds

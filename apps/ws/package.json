@@ -1,22 +1,23 @@
 {
   "name": "ws",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "WebSocket server for Exness CFD trading platform",
+  "main": "dist/index.js",
   "scripts": {
     "build": "tsc -b",
     "start": "node dist/index.js",
     "dev": "npm run build && npm run start"
   },
-  "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "module",
   "dependencies": {
+    "redis": "^5.8.2",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.3",
     "@types/redis": "^4.0.10",
     "@types/ws": "^8.18.1",
-    "redis": "^5.8.2",
-    "typescript": "^5.9.2",
-    "ws": "^8.18.3"
+    "typescript": "^5.9.2"
   }
 }
