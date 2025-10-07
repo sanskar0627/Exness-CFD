@@ -1,14 +1,13 @@
+//it formats and publishes that data into Redis channels
 import { fromInternalPrice, toInternalPrice } from "./utils.js";
 import { createClient, type RedisClientType } from "redis";
-
-const symbolMap: { [key: string]: string } = { 
-  BTCUSDT: "BTC", 
-  ETHUSDT: "ETH", 
-  SOLUSDT: "SOL" 
+//standardizes symbol names all over the code
+const symbolMap: { [key: string]: string } = { BTCUSDT: "BTC", ETHUSDT: "ETH", SOLUSDT: "SOL" 
 };
 
 export async function setupRedis() {
   try {
+    //making connection to redis
     const redis = createClient({ url: "redis://localhost:6379" });
     await redis.connect();
     console.log("✅ Redis connected");
@@ -20,34 +19,30 @@ export async function setupRedis() {
     redis.on('disconnect', () => {
       console.warn('⚠️ Redis disconnected');
     });
-    
+    //this wil return redis object so other parts of the app can reuse this same instance
     return redis;
   } catch (error) {
     console.error('❌ Failed to setup Redis:', error);
     throw error; // Re-throw to stop the app if Redis fails
   }
 }
-
-export async function pushToRedis(
-  redis: any, 
-  value: number, 
-  type: string, 
-  time: number
-): Promise<void> {
+//This function is where the actual live market data is sent to Redis.
+export async function pushToRedis(redis: any, value: number, type: string, time: number): Promise<void> {
   try {
+    //cheks the valid input the user want if no then return nothing and stops
     const symbol = symbolMap[type];
     if (!symbol) return;
 
     const realVal = fromInternalPrice(value);
-    const ask = toInternalPrice(realVal * 1.01);
-    const bid = toInternalPrice(realVal);
-
+    const ask = toInternalPrice(realVal * 1.01);    //sell price
+    const bid = toInternalPrice(realVal);           //Price buy price
+    // publish a message on the Redis channel named after symbol
     await redis.publish(
       symbol,
       JSON.stringify({
         symbol,
-        askPrice: ask,
-        bidPrice: bid,
+        askPrice: ask, 
+        bidPrice: bid,  
         decimals: 4,
         time: Math.floor(new Date(time).getTime() / 1000),
       }),
