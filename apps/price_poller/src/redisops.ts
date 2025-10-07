@@ -36,17 +36,20 @@ export async function pushToRedis(redis: any, value: number, type: string, time:
     const realVal = fromInternalPrice(value);
     const ask = toInternalPrice(realVal * 1.01);    //sell price
     const bid = toInternalPrice(realVal);           //Price buy price
-    // publish a message on the Redis channel named after symbol
-    await redis.publish(
+    
+    const priceData = {
       symbol,
-      JSON.stringify({
-        symbol,
-        askPrice: ask, 
-        bidPrice: bid,  
-        decimals: 4,
-        time: Math.floor(new Date(time).getTime() / 1000),
-      }),
-    );
+      askPrice: ask, 
+      bidPrice: bid,  
+      decimals: 4,
+      time: Math.floor(new Date(time).getTime() / 1000),
+    };
+
+    // Store price data for quick retrieval (used by trading service)
+    await redis.set(`price:${symbol}`, JSON.stringify(priceData), 'EX', 60); // Expire in 60 seconds
+
+    // publish a message on the Redis channel named after symbol for live updates
+    await redis.publish(symbol, JSON.stringify(priceData));
   } catch (error) {
     console.error(`❌ Failed to publish to Redis for ${type}:`, error);
     throw error; // Re-throw so caller can handle

@@ -7,15 +7,6 @@ generator client {
   provider = "prisma-client-js"
 }
 
-model Trade {
-  id        Int      @id @default(autoincrement())
-  tradeId   BigInt   @unique
-  symbol    String
-  price     BigInt
-  quantity  BigInt
-  timestamp DateTime
-}
-
 model User {
   id          String @id @default(uuid())
   email       String @unique
