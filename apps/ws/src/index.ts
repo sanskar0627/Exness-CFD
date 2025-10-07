@@ -4,8 +4,11 @@ import { WebSocket, WebSocketServer } from "ws";
 //The url points to redis instance running the same docker network
 const redis = createClient({ url: "redis://localhost:6379" }); // this is for docker to run locally redish basically
 
-//starting websocket on port8080
-const websocket = new WebSocketServer({ port: 8080 });
+// WebSocket port configuration - Use environment variable with fallback
+const WS_PORT = process.env.WS_PORT ? parseInt(process.env.WS_PORT) : 8080;
+
+//starting websocket on configurable port
+const websocket = new WebSocketServer({ port: WS_PORT });
 
 //Key is websocket connection and value is the price of BTC, ETH, SOL and all, helps to get which client wants which price
 const client = new Map<WebSocket, Set<string>>();//To make a new one, you write new Map()
@@ -16,7 +19,8 @@ export const Channels = ["SOL", "ETH", "BTC"];
 const start = async () => {
   try {
     await redis.connect(); //connecting redis
-    console.log("Connected to Redis successfully");
+    console.log(`✅ WebSocket server connected to Redis successfully`);
+    console.log(`🌐 WebSocket server running on port ${WS_PORT}`);
 
     //whenever the price of coins will change then this callback function will call
     Channels.forEach((ch) => {

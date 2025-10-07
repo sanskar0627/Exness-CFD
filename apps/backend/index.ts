@@ -9,6 +9,7 @@ import { RedisManager } from "./utils/redisClient.js";
 import { tradesRouter } from "./router/trades.js";
 import { assetrouter } from "./router/asset.js";
 import { tradeRouter } from "./router/trade.js";
+import { candelrouter } from "./router/candels.js";
 import { checkOpenPositions } from "./services/orderMonitoring.js";
 import prisma from "./lib/prisma.js";
 import { cacheService } from "./services/cacheService.js";
@@ -34,6 +35,7 @@ app.use("/api/v1/trades", tradesRouter);
 app.use("/api/v1/trade", tradeRouter);
 app.use("/api/v1/user", userRouter);
 app.use("/api/v1/asset", assetrouter);
+app.use("/api/v1/candlestick", candelrouter);
 
 // Error handling
 app.use(notFoundHandler);
@@ -75,8 +77,9 @@ async function startServer() {
   try {
     await initializeServices();
 
-    const server = app.listen(config.PORT, () => {
+    const server = app.listen(config.PORT, '0.0.0.0', () => {
       logger.info(`🚀 HTTP Server running on port ${config.PORT}`);
+      logger.info(`🌐 Server accessible at http://localhost:${config.PORT}`);
       logger.info(`Environment: ${config.NODE_ENV}`);
     });
 
