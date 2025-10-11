@@ -83,8 +83,8 @@ userRouter.get("/balance", usermiddleware, async (req, res) => {
     const balance = await userService.getUserBalanceFast(userId);
     
     return res.status(200).json({
-      usd_balance: balance * 100, // Convert back to cents for compatibility
-      balance: balance
+      balance: balance, // Primary balance in dollars
+      usd_balance: Math.round(balance * 100) // Balance in cents for frontend compatibility
     });
   } catch (error) {
     console.error('Balance fetch error:', error);

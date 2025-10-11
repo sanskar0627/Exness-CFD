@@ -48,6 +48,10 @@ async function initializeServices() {
     await prisma.$connect();
     logger.info("✅ Database connected");
 
+    // Initialize cache service
+    await cacheService.initialize();
+    logger.info("✅ Cache service initialized");
+
     // Initialize Redis and price updates
     const redis = await RedisManager.getInstance();
     logger.info("✅ Redis connected");

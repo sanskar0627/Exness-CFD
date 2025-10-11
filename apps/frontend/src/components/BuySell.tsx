@@ -35,8 +35,8 @@ export default function BuySell({
     const getUserBalance = async () => {
       try {
         const response = await findUserAmount();
-        if (response && response.balance) {
-          setUserBalance(response.balance.usd_balance);
+        if (response && response.balance !== undefined) {
+          setUserBalance(response.balance);
         }
       } catch (err) {
         console.error("Error fetching user balance", err);
@@ -87,13 +87,15 @@ export default function BuySell({
       setIsSubmitting(true);
       setError("");
 
-      const token =
-        document.cookie
-          .split("; ")
-          .find((row) => row.startsWith("Authorization="))
-          ?.split("=")[1] || "";
+      const token = localStorage.getItem("token") || "";
 
-      const response = await await createTrade({
+      if (!token) {
+        setError("Please sign in to place trades");
+        setTimeout(() => setError(""), 3000);
+        return;
+      }
+
+      const response = await createTrade({
         symbol,
         activeTab,
         margin,
@@ -109,14 +111,21 @@ export default function BuySell({
         setTimeout(() => setSuccess(""), 3000);
 
         const balanceResponse = await findUserAmount();
-        if (balanceResponse && balanceResponse.balance) {
-          setUserBalance(balanceResponse.balance.usd_balance);
+        if (balanceResponse && balanceResponse.balance !== undefined) {
+          setUserBalance(balanceResponse.balance);
         }
       }
     } catch (err) {
       if (axios.isAxiosError(err)) {
-        setError(err.response?.data?.message || "Failed to place order");
-        setTimeout(() => setError(""), 3000);
+        if (err.response?.status === 401) {
+          setError("Session expired. Please sign in again.");
+          // Clear invalid token
+          localStorage.removeItem("token");
+          localStorage.removeItem("userID");
+        } else {
+          setError(err.response?.data?.message || "Failed to place order");
+        }
+        setTimeout(() => setError(""), 5000);
       } else {
         setError("An unexpected error occurred");
         setTimeout(() => setError(""), 3000);
@@ -182,7 +191,7 @@ export default function BuySell({
               <div className="text-sm font-semibold">{symbol}</div>
             )}
             <div className="ml-auto text-xs text-white/70 bg-[#1c2a31] px-2 py-0.5 rounded">
-              <span className="text-white/50">Balance:</span> {userBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })} USD
+              <span className="text-white/50">Balance:</span> {(userBalance || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })} USD
             </div>
           </div>
         </header>

@@ -53,7 +53,7 @@ export class UserService {
       data: {
         email: data.email,
         password: hashedPassword,
-        usdBalance: BigInt(500000) // $5000.00 in cents
+        usdBalance: BigInt(500000) // $5000.00 in cents (starting bonus)
       },
       select: {
         id: true,
@@ -63,9 +63,13 @@ export class UserService {
       }
     });
 
+    // Initialize cache with starting balance
+    const balance = Number(user.usdBalance) / 100;
+    cacheService.updateUserBalanceCache(user.id, balance);
+
     return {
       ...user,
-      balance: Number(user.usdBalance) / 100 // Convert cents to dollars for display
+      balance: balance // Convert cents to dollars for display
     };
   }
 
@@ -129,6 +133,16 @@ export class UserService {
   async updateUserBalance(userId: string, newBalanceInDollars: number) {
     // Update cache immediately (instant response)
     cacheService.updateUserBalanceCache(userId, newBalanceInDollars);
+    
+    // Also update database immediately to ensure consistency
+    try {
+      await prisma.user.update({
+        where: { id: userId },
+        data: { usdBalance: BigInt(Math.round(newBalanceInDollars * 100)) }
+      });
+    } catch (error) {
+      console.error('Failed to update user balance in database:', error);
+    }
 
     return {
       id: userId,

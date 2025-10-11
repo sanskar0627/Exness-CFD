@@ -133,8 +133,10 @@ export default function ChartComponent({
       };
 
       const rawData = await getChartData(symbol, duration);
-      candlestickSeries.setData(rawData);
-      chart.timeScale().fitContent();
+      if (candlestickSeries && rawData) {
+        candlestickSeries.setData(rawData);
+        chart.timeScale().fitContent();
+      }
 
       const signalingManager = Signalingmanager.getInstance();
       unwatch = signalingManager.watch(symbol, tickWrapper);

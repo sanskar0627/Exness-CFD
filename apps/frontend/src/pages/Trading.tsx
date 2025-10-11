@@ -22,14 +22,14 @@ export default function Trading() {
         const data = await findUserAmount();
         
         // Check if we got an error response or invalid data
-        if (!data || data.message || data.usd_balance === undefined || data.usd_balance === null) {
+        if (!data || data.message || data.balance === undefined || data.balance === null) {
           console.log("Authentication failed or invalid response:", data);
           localStorage.removeItem("token");
           localStorage.removeItem("userID");
           navigate("/signin");
         } else {
           // Set user balance for display
-          setUserBalance(data.usd_balance);
+          setUserBalance(data.balance);
         }
       } catch (error) {
         console.error("Error fetching user data:", error);
@@ -238,8 +238,8 @@ export default function Trading() {
             <div className="w-full h-full md:w-1/4">
               <BuySell
                 symbol={symbol}
-                askPrice={toDisplayPrice(prices.askPrice)}
-                bidPrice={toDisplayPrice(prices.bidPrice)}
+                buyPrice={toDisplayPrice(prices.askPrice)}
+                sellPrice={toDisplayPrice(prices.bidPrice)}
               />
             </div>
           </div>

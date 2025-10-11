@@ -41,6 +41,8 @@ export class TradingService {
       // 3. DEDUCT: User balance (instant cache update)
       const newBalance = userBalance - data.margin;
       await userService.updateUserBalance(data.userId, newBalance);
+      
+      logger.info(`💰 Balance updated: User ${data.userId} - ${userBalance} -> ${newBalance} (deducted ${data.margin})`);
 
       // 4. PERSIST: Save order to database (permanent record)
       const order = await prisma.userOrder.create({
@@ -85,14 +87,22 @@ export class TradingService {
 
   async closeOrder(data: CloseOrderData) {
     try {
-      // 1. FETCH: Get order from database
+      // 1. FETCH: Get order from database with explicit lock check
       const order = await prisma.userOrder.findUnique({
         where: { id: data.orderId }
       });
 
-      if (!order || order.status !== 'open') {
-        throw new Error('Order not found or already closed');
+      if (!order) {
+        logger.warn(`❌ Order ${data.orderId} not found`);
+        throw new Error('Order not found');
       }
+
+      if (order.status !== 'open') {
+        logger.warn(`❌ Order ${data.orderId} already closed (status: ${order.status})`);
+        return { pnl: 0 }; // Return success to prevent retry
+      }
+
+      logger.info(`🔄 Closing order ${data.orderId} - ${order.orderType} ${order.asset} (reason: ${data.closeReason})`);
 
       // 2. CALCULATE: PnL
       const openPrice = Number(order.openPrice);
@@ -109,35 +119,50 @@ export class TradingService {
       const currentBalance = await userService.getUserBalanceFast(order.userId);
       const newBalance = currentBalance + margin + pnl;
       await userService.updateUserBalance(order.userId, newBalance);
+      
+      logger.info(`💰 Balance updated: User ${order.userId} - ${currentBalance} -> ${newBalance} (returned ${margin} + PnL ${pnl})`);
 
-      // 4. PERSIST: Move order to closed_orders table
-      const [updatedOrder, closedOrder] = await prisma.$transaction([
-        prisma.userOrder.update({
-          where: { id: data.orderId },
-          data: { status: 'closed' }
-        }),
-        prisma.closedOrder.create({
-          data: {
-            userId: order.userId,
-            originalOrderId: order.id,
-            orderType: order.orderType,
-            margin: order.margin,
-            leverage: order.leverage,
-            asset: order.asset,
-            openPrice: order.openPrice,
-            closePrice: BigInt(Math.round(data.closePrice)),
-            pnl: BigInt(Math.round(pnl * 100)), // Convert to cents
-            closeReason: data.closeReason,
-            openedAt: order.createdAt
-          }
-        })
-      ]);
+      // 4. PERSIST: Move order to closed_orders table (atomic transaction)
+      try {
+        const [updatedOrder, closedOrder] = await prisma.$transaction([
+          prisma.userOrder.update({
+            where: { 
+              id: data.orderId,
+              status: 'open' // Double-check status in the update
+            },
+            data: { status: 'closed' }
+          }),
+          prisma.closedOrder.create({
+            data: {
+              userId: order.userId,
+              originalOrderId: order.id,
+              orderType: order.orderType,
+              margin: order.margin,
+              leverage: order.leverage,
+              asset: order.asset,
+              openPrice: order.openPrice,
+              closePrice: BigInt(Math.round(data.closePrice)),
+              pnl: BigInt(Math.round(pnl * 100)), // Convert to cents
+              closeReason: data.closeReason,
+              openedAt: order.createdAt
+            }
+          })
+        ]);
 
-      // 5. CACHE: Remove from active orders cache
-      await cacheService.removeOrderFromCache(order.userId, data.orderId);
+        // 5. CACHE: Remove from active orders cache
+        await cacheService.removeOrderFromCache(order.userId, data.orderId);
 
-      logger.info(`✅ Order closed: ${data.orderId}, PnL: $${pnl.toFixed(2)}`);
-      return { pnl };
+        logger.info(`✅ Order closed: ${data.orderId}, PnL: $${pnl.toFixed(2)}`);
+        return { pnl };
+
+      } catch (transactionError: any) {
+        // If transaction fails due to concurrent update, order was likely already closed
+        if (transactionError.code === 'P2025') {
+          logger.warn(`⚠️ Order ${data.orderId} was already closed by another process`);
+          return { pnl: 0 };
+        }
+        throw transactionError;
+      }
 
     } catch (error) {
       logger.error('❌ Failed to close order:', error);

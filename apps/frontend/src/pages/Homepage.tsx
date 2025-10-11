@@ -12,8 +12,8 @@ export default function PersonalDashboard() {
         const token = localStorage.getItem("token");
         if (token) {
           const data = await findUserAmount();
-          if (data && data.usd_balance !== undefined) {
-            setUserBalance(data.usd_balance);
+          if (data && data.balance !== undefined) {
+            setUserBalance(data.balance); // Use 'balance' consistently
             setIsAuthenticated(true);
           }
         }
