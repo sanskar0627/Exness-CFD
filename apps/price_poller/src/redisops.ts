@@ -37,6 +37,11 @@ export async function pushToRedis(redis: any, value: number, type: string, time:
     const ask = toInternalPrice(realVal * 1.01);    //sell price
     const bid = toInternalPrice(realVal);           //Price buy price
     
+    // Debug logging to track price conversion
+    if (symbol === "ETH" && Math.random() < 0.1) { // Log 10% of ETH prices
+      console.log(`🔍 ETH Price Flow: input=${value} → realVal=$${realVal.toFixed(2)} → ask=${ask} bid=${bid}`);
+    }
+    
     const priceData = {
       symbol,
       askPrice: ask, 

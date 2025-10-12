@@ -10,7 +10,12 @@ tradeRouter.post("/", usermiddleware, async (req, res) => {
   try {
     const tradeschema = tradeSchema.safeParse(req.body);
     if (!tradeschema.success) {
-      return res.status(411).json({ message: "Incorrect inputs" });
+      console.error("❌ Trade validation failed:", tradeschema.error.errors);
+      console.error("📦 Received payload:", req.body);
+      return res.status(411).json({ 
+        message: "Incorrect inputs",
+        errors: tradeschema.error.errors 
+      });
     }
     
     let { asset, type, margin, leverage, takeProfit, stopLoss } = tradeschema.data;

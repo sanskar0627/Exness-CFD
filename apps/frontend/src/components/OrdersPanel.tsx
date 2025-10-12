@@ -60,6 +60,7 @@ export default function OrdersPanel() {
       const token = localStorage.getItem("token") || "";
 
       const response = await getclosedtrades(token);
+      console.log(`📜 Fetched ${response.data.trades?.length || 0} closed trades:`, response.data.trades);
       setClosedOrders(response.data.trades || []);
     } catch (error) {
       console.error("Error fetching closed orders:", error);
@@ -453,7 +454,7 @@ export default function OrdersPanel() {
                       {order.type === "buy" ? "LONG" : "SHORT"}
                     </td>
                     <td className="py-3 px-3 text-right text-neutral-50">
-                      {toDisplayPriceUSD(order.margin)} USD
+                      ${order.margin.toFixed(2)} USD
                     </td>
                     <td className="py-3 px-3 text-right text-neutral-50">
                       ${toDisplayPrice(order.openPrice)}
@@ -463,13 +464,13 @@ export default function OrdersPanel() {
                     </td>
                     <td
                       className={`py-3 px-3 text-right font-medium ${
-                        toDisplayPriceUSD(order.pnl) >= 0
+                        order.pnl >= 0
                           ? "text-green-500"
                           : "text-[#EB483F]"
                       }`}
                     >
-                      {toDisplayPriceUSD(order.pnl) >= 0 ? "+" : ""}
-                      {toDisplayPriceUSD(order.pnl)} USD
+                      {order.pnl >= 0 ? "+" : ""}
+                      ${order.pnl.toFixed(2)} USD
                     </td>
                   </tr>
                 ))}

@@ -7,27 +7,10 @@ export async function saveTradeBatch(trades: any[]) {
   if (!trades.length) return;
   
   try {
-    const redis = createClient({ url: 'redis://localhost:6379' });
-    await redis.connect();
-    
-    let savedCount = 0;
-    
-    for (const trade of trades) {
-      // Save price data to Redis with proper key structure
-      const priceData = {
-        bidPrice: trade.price,
-        askPrice: trade.price + 1, // Small spread for simulation
-        timestamp: trade.timestamp
-      };
-      
-      await redis.set(`price:${trade.symbol}`, JSON.stringify(priceData));
-      await redis.publish(trade.symbol, JSON.stringify(priceData));
-      savedCount++;
-    }
-    
-    await redis.disconnect();
-    console.log(`Saved ${savedCount} trades to Redis`);
+    // This function is now just for logging/metrics purposes
+    // The actual price publishing is done by redisops.ts to avoid conflicts
+    console.log(`Processed ${trades.length} trades (prices published via redisops)`);
   } catch (e) {
-    console.error("Redis batch save error:", e);
+    console.error("Trade batch processing error:", e);
   }
 }

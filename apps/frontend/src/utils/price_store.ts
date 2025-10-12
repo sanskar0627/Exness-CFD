@@ -40,6 +40,19 @@ function ensureInitialized() {
       "",
     ) as BaseSymbol;
     if (!(base in latestPrices)) return;
+    
+    // Validate prices - reject corrupted data
+    // Max prices in internal format: BTC=$250k, ETH=$15k, SOL=$1500
+    const maxPrice = base === "BTC" ? 2500000000 : base === "ETH" ? 150000000 : 15000000;
+    if (t.bidPrice && t.bidPrice > maxPrice) {
+      console.warn(`⚠️ Rejected invalid bid price for ${base}: ${t.bidPrice} (max: ${maxPrice})`);
+      return;
+    }
+    if (t.askPrice && t.askPrice > maxPrice) {
+      console.warn(`⚠️ Rejected invalid ask price for ${base}: ${t.askPrice} (max: ${maxPrice})`);
+      return;
+    }
+    
     const next: LivePrices = {
       ...latestPrices,
       [base]: {

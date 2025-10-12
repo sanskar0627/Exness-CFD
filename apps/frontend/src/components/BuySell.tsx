@@ -16,6 +16,17 @@ export default function BuySell({
   sellPrice: number;
   symbol: SYMBOL;
 }) {
+  // Log prices received as props
+  console.log(`📊 BuySell received prices for ${symbol}: buy=${buyPrice}, sell=${sellPrice}`);
+  
+  // Validate reasonable price ranges (in USD display format)
+  const maxReasonableUSD = symbol === "BTC" ? 250000 : symbol === "ETH" ? 15000 : 1500;
+  const pricesInvalid = buyPrice > maxReasonableUSD || sellPrice > maxReasonableUSD;
+  
+  if (pricesInvalid) {
+    console.warn(`⚠️ BuySell rejecting invalid prices for ${symbol}: buy=${buyPrice}, sell=${sellPrice} (max: $${maxReasonableUSD})`);
+  }
+  
   const [orderType, setOrderType] = useState<"market" | "pending">("market");
   const [margin, setMargin] = useState<number>(100);
   const [leverage, setLeverage] = useState<number>(1);
@@ -35,8 +46,10 @@ export default function BuySell({
     const getUserBalance = async () => {
       try {
         const response = await findUserAmount();
-        if (response && response.balance !== undefined) {
-          setUserBalance(response.balance);
+        console.log(`🏦 Balance API response for ${symbol}:`, response);
+        if (response && response.usd_balance !== undefined) {
+          setUserBalance(response.usd_balance); // Use cents for proper display
+          console.log(`💰 Set userBalance to: ${response.usd_balance} cents ($${(response.usd_balance / 100).toFixed(2)})`);
         }
       } catch (err) {
         console.error("Error fetching user balance", err);
@@ -70,16 +83,35 @@ export default function BuySell({
       clearInterval(balanceIntervalId);
       clearInterval(assetsIntervalId);
     };
-  }, [symbol]);  const handleSubmitTrade = async () => {
+  }, [symbol]);
+
+  // Log props whenever they change to help debug price updates
+  useEffect(() => {
+    console.log(`💰 BuySell component updated - Symbol: ${symbol}, Buy: ${buyPrice}, Sell: ${sellPrice}`);
+  }, [symbol, buyPrice, sellPrice]);  const handleSubmitTrade = async () => {
+    // Validate price sanity
+    const maxReasonableUSD = symbol === "BTC" ? 250000 : symbol === "ETH" ? 15000 : 1500;
+    if (buyPrice > maxReasonableUSD || sellPrice > maxReasonableUSD || buyPrice <= 0 || sellPrice <= 0) {
+      setError(`Invalid price data. Please wait for correct prices to load...`);
+      setTimeout(() => setError(""), 3000);
+      return;
+    }
+    
     if (margin <= 0) {
       setError("Margin must be greater than 0");
       setTimeout(() => setError(""), 3000);
       return;
     }
 
-    if (margin > userBalance) {
-      setError("Insufficient balance");
-      setTimeout(() => setError(""), 3000);
+    // Convert margin to cents for comparison with userBalance (which is in cents)
+    const marginInCents = margin * 100;
+    const balanceInDollars = userBalance / 100;
+    
+    console.log(`💵 Balance check: margin=$${margin}, balance=$${balanceInDollars.toFixed(2)}, marginInCents=${marginInCents}, userBalance=${userBalance}`);
+    
+    if (marginInCents > userBalance) {
+      setError(`Insufficient balance: Need $${margin} but only have $${balanceInDollars.toFixed(2)}`);
+      setTimeout(() => setError(""), 5000);
       return;
     }
 
@@ -94,6 +126,16 @@ export default function BuySell({
         setTimeout(() => setError(""), 3000);
         return;
       }
+
+      // Log the trade request details for debugging
+      console.log(`🎯 Creating ${activeTab} order:`, {
+        symbol,
+        margin,
+        leverage,
+        userBalance: userBalance / 100, // Display in dollars
+        buyPrice,
+        sellPrice
+      });
 
       const response = await createTrade({
         symbol,
@@ -111,8 +153,8 @@ export default function BuySell({
         setTimeout(() => setSuccess(""), 3000);
 
         const balanceResponse = await findUserAmount();
-        if (balanceResponse && balanceResponse.balance !== undefined) {
-          setUserBalance(balanceResponse.balance);
+        if (balanceResponse && balanceResponse.usd_balance !== undefined) {
+          setUserBalance(balanceResponse.usd_balance); // Use cents for proper display
         }
       }
     } catch (err) {

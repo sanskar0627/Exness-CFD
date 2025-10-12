@@ -223,6 +223,7 @@ export async function createTrade({
         data: error.response?.data,
         message: error.message
       });
+      console.error("🔍 Full backend response:", JSON.stringify(error.response?.data, null, 2));
       
       // Throw with detailed error information
       const errorMessage = error.response?.data?.message || 

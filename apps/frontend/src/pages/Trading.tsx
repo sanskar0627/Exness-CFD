@@ -15,6 +15,19 @@ export default function Trading() {
   const [prices, setPrices] = useState({ askPrice: 0, bidPrice: 0 });
   const [userBalance, setUserBalance] = useState<number>(0);
   const navigate = useNavigate();
+
+  // Reset prices when symbol changes to avoid showing stale prices
+  useEffect(() => {
+    console.log(`📊 Trading page - Symbol changed to: ${symbol}, resetting prices`);
+    setPrices({ askPrice: 0, bidPrice: 0 });
+  }, [symbol]);
+
+  // Log price updates
+  useEffect(() => {
+    if (prices.askPrice > 0 || prices.bidPrice > 0) {
+      console.log(`💹 Price update for ${symbol} - Ask: ${prices.askPrice}, Bid: ${prices.bidPrice}`);
+    }
+  }, [prices, symbol]);
   
   useEffect(() => {
     async function checkdata() {
@@ -22,14 +35,16 @@ export default function Trading() {
         const data = await findUserAmount();
         
         // Check if we got an error response or invalid data
-        if (!data || data.message || data.balance === undefined || data.balance === null) {
+        if (!data || data.message || data.usd_balance === undefined || data.usd_balance === null) {
           console.log("Authentication failed or invalid response:", data);
           localStorage.removeItem("token");
           localStorage.removeItem("userID");
           navigate("/signin");
         } else {
-          // Set user balance for display
-          setUserBalance(data.balance);
+          // Set user balance in cents for proper display with toDisplayPriceUSD
+          console.log(`💰 Trading page - Balance received: ${data.usd_balance} cents = $${(data.usd_balance / 100).toFixed(2)}`);
+          console.log(`💰 Will display as: $${toDisplayPriceUSD(data.usd_balance).toFixed(2)}`);
+          setUserBalance(data.usd_balance);
         }
       } catch (error) {
         console.error("Error fetching user data:", error);
@@ -237,6 +252,7 @@ export default function Trading() {
 
             <div className="w-full h-full md:w-1/4">
               <BuySell
+                key={symbol} // Force remount when symbol changes
                 symbol={symbol}
                 buyPrice={toDisplayPrice(prices.askPrice)}
                 sellPrice={toDisplayPrice(prices.bidPrice)}
