@@ -1,6 +1,13 @@
 import { createClient } from "redis";
 import { WebSocket, WebSocketServer } from "ws";
 
+// Price precision constant - prices in Redis are stored as integers (multiply by 10000)
+const PRECISION = 10000;
+
+function fromInternalPrice(price: number): number {
+  return price / PRECISION;
+}
+
 //The url points to redis instance running the same docker network
 const redis = createClient({ url: "redis://localhost:6379" }); // this is for docker to run locally redish basically
 
@@ -26,11 +33,20 @@ const start = async () => {
     Channels.forEach((ch) => {
       redis.subscribe(ch, (data: string) => {
         try {
+          // Parse the Redis data and convert prices from internal to display format
+          const priceData = JSON.parse(data);
+          const convertedData = {
+            ...priceData,
+            askPrice: fromInternalPrice(priceData.askPrice),
+            bidPrice: fromInternalPrice(priceData.bidPrice)
+          };
+          const messageToSend = JSON.stringify(convertedData);
+
           client.forEach((symbs, ws: WebSocket) => {
             //if the client has subscribed to current symbol, forward the redis message to that client
             if (symbs.has(ch) && ws.readyState === WebSocket.OPEN) {
               try {
-                ws.send(data);
+                ws.send(messageToSend);
               } catch (sendError) {
                 console.error(`❌ Failed to send to client:`, sendError);
                 // Remove dead connection

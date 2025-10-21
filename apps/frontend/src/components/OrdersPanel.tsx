@@ -4,6 +4,7 @@ import {
   calculatePnlCents,
   toDisplayPrice,
   toDisplayPriceUSD,
+  toInternalPrice,
 } from "../utils/utils";
 import { subscribePrices, type LivePrices } from "../utils/price_store";
 
@@ -105,10 +106,11 @@ export default function OrdersPanel() {
 
       const currentcloseprice = o.type === "buy" ? p.bid : p.ask;
       // Dynamic P&L based on side: buy uses current buyPrice; sell uses current sellPrice
+      // Convert current price from display format to internal format for calculation
       const pnlInCents = calculatePnlCents({
         side: o.type,
         openPrice: o.openPrice,
-        closePrice: currentcloseprice,
+        closePrice: toInternalPrice(currentcloseprice),
         marginCents: o.margin,
         leverage: o.leverage,
       });
@@ -122,7 +124,9 @@ export default function OrdersPanel() {
     const p = latestPrices[sym as keyof LivePrices];
     if (!p) return { tpStatus: "none", slStatus: "none" };
 
-    const currentPrice = order.type === "buy" ? p.bid : p.ask;
+    // Convert current price from display format to internal format for comparison
+    const currentPriceDisplay = order.type === "buy" ? p.bid : p.ask;
+    const currentPrice = toInternalPrice(currentPriceDisplay);
 
     let tpStatus = "none";
     let slStatus = "none";

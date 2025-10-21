@@ -4,6 +4,13 @@ import logger from "../utils/logger.js";
 
 export const candelrouter = Router();
 
+// Price precision constant - prices are stored as integers (multiply by 10000)
+const PRECISION = 10000;
+
+function fromInternalPrice(price: number): number {
+  return price / PRECISION;
+}
+
 interface CandlestickData {
   symbol: string;
   open: number;
@@ -36,14 +43,15 @@ candelrouter.get("/:symbol", async (req, res) => {
     }
 
     const now = Date.now();
-    
+
     // Generate mock candlestick data based on current price
     // In a real application, this would fetch historical data from a database
     const candlesticks: CandlestickData[] = [];
     const limitNum = Math.min(parseInt(limit as string) || 100, 1000);
-    
+
     // Generate historical candlestick data (mock)
-    let basePrice = priceData.bid || 50000;
+    // Convert from internal price format to display format
+    let basePrice = fromInternalPrice(priceData.bid || 500000000);
     
     for (let i = limitNum - 1; i >= 0; i--) {
       const timestamp = now - (i * 60000); // 1 minute intervals

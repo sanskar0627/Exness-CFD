@@ -64,7 +64,7 @@ export default function Signup() {
         setIsLoading(false);
         setError(signupData.message || "Signup failed");
       }
-    } catch (error) {
+    } catch {
       setIsSubmitted(false);
       setIsLoading(false);
       setError("An error occurred during signup");

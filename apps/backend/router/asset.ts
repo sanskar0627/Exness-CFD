@@ -3,6 +3,13 @@ import { RedisManager } from "../utils/redisClient.js";
 
 export const assetrouter = Router();
 
+// Price precision constant - prices are stored as integers (multiply by 10000)
+const PRECISION = 10000;
+
+function fromInternalPrice(price: number): number {
+  return price / PRECISION;
+}
+
 assetrouter.get("/", async (req, res) => {
   const assetDetails = [
     {
@@ -46,8 +53,8 @@ assetrouter.get("/", async (req, res) => {
       return {
         name: asset.name,
         symbol: asset.symbol,
-        buyPrice: priceData.ask, //buy price is(more one)
-        sellPrice: priceData.bid, // sell price
+        buyPrice: fromInternalPrice(priceData.ask), //buy price is(more one)
+        sellPrice: fromInternalPrice(priceData.bid), // sell price
         decimals: asset.decimals,
         imageUrl: asset.imageUrl,
       };

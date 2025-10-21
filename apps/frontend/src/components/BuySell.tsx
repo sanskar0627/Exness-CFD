@@ -39,7 +39,7 @@ export default function BuySell({
   const [error, setError] = useState<string>("");
   const [success, setSuccess] = useState<string>("");
   const [userBalance, setUserBalance] = useState<number>(0);
-  const [assets, setAssets] = useState<Asset[]>(fallbackAssets);
+  const [, setAssets] = useState<Asset[]>(fallbackAssets);
   const [currentAsset, setCurrentAsset] = useState<Asset | null>(null);
 
   useEffect(() => {

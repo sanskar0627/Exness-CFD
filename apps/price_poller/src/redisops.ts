@@ -33,13 +33,14 @@ export async function pushToRedis(redis: any, value: number, type: string, time:
     const symbol = symbolMap[type];
     if (!symbol) return;
 
-    const realVal = fromInternalPrice(value);
-    const ask = toInternalPrice(realVal * 1.01);    //sell price
-    const bid = toInternalPrice(realVal);           //Price buy price
+    // FIX: value is already in internal format (×10000), just add 1% spread for ask
+    const ask = Math.round(value * 1.01);    // sell price (1% higher)
+    const bid = value;                        // buy price (actual price)
     
     // Debug logging to track price conversion
     if (symbol === "ETH" && Math.random() < 0.1) { // Log 10% of ETH prices
-      console.log(`🔍 ETH Price Flow: input=${value} → realVal=$${realVal.toFixed(2)} → ask=${ask} bid=${bid}`);
+      const displayPrice = fromInternalPrice(value);
+      console.log(`🔍 ETH Price Flow: internal=${value} → display=$${displayPrice.toFixed(2)} → ask=${ask} bid=${bid}`);
     }
     
     const priceData = {

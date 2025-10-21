@@ -39,9 +39,9 @@ export default function AskBids({ symbol }: { symbol?: SYMBOL }) {
   useEffect(() => {
     const unsubscribe = subscribePrices((prices: LivePrices) => {
       setBidsAsks({
-        BTC: { bids: toDisplayPrice(prices.BTC.ask), asks: toDisplayPrice(prices.BTC.bid), symbol: "BTC" },
-        ETH: { bids: toDisplayPrice(prices.ETH.ask), asks: toDisplayPrice(prices.ETH.bid), symbol: "ETH" },
-        SOL: { bids: toDisplayPrice(prices.SOL.ask), asks: toDisplayPrice(prices.SOL.bid), symbol: "SOL" },
+        BTC: { bids: prices.BTC.ask, asks: prices.BTC.bid, symbol: "BTC" },
+        ETH: { bids: prices.ETH.ask, asks: prices.ETH.bid, symbol: "ETH" },
+        SOL: { bids: prices.SOL.ask, asks: prices.SOL.bid, symbol: "SOL" },
       });
     });
     return () => unsubscribe();

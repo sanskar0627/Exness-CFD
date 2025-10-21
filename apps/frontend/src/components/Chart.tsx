@@ -111,11 +111,9 @@ export default function ChartComponent({
         if (trade.symbol !== symbol) return;
 
         // Validate prices - reject prices that are unreasonably large (likely corrupted data)
-        // Expected price ranges in internal format (x10000):
-        // BTC: $10k-$200k → 100,000,000 - 2,000,000,000
-        // ETH: $500-$10k → 5,000,000 - 100,000,000  
-        // SOL: $10-$1000 → 100,000 - 10,000,000
-        const maxReasonablePrice = symbol === "BTC" ? 2500000000 : symbol === "ETH" ? 150000000 : 15000000;
+        // Expected price ranges in display format (USD):
+        // BTC: $10k-$250k, ETH: $500-$15k, SOL: $10-$1500
+        const maxReasonablePrice = symbol === "BTC" ? 250000 : symbol === "ETH" ? 15000 : 1500;
         
         if (trade.bidPrice > maxReasonablePrice || trade.askPrice > maxReasonablePrice) {
           console.warn(`⚠️ Rejected invalid price for ${symbol}: bid=${trade.bidPrice}, ask=${trade.askPrice} (max: ${maxReasonablePrice})`);

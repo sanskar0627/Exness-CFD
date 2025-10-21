@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import axios from "axios";
-import { convertoUsdPrice, toDisplayPrice } from "../utils/utils";
+import { toDisplayPrice } from "../utils/utils";
 import type { SYMBOL } from "../utils/constants";
 import type { Asset } from "../types/asset";
 
@@ -180,7 +180,7 @@ export async function createTrade({
     };
 
     // Convert margin to cents as expected by backend
-    payload["margin"] = convertoUsdPrice(margin);
+    payload["margin"] = margin; // Backend expects dollars, not cents
 
     if (tpEnabled && tpPrice) {
       const tpValue = Number(tpPrice);

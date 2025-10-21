@@ -17,7 +17,7 @@ export default function PersonalDashboard() {
             setIsAuthenticated(true);
           }
         }
-      } catch (error) {
+      } catch {
         console.log("User not authenticated or error fetching balance");
         setIsAuthenticated(false);
       }

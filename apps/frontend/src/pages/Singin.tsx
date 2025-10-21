@@ -49,7 +49,7 @@ export default function Signin() {
         setIsLoading(false);
         setError(data.message || "Login failed");
       }
-    } catch (error) {
+    } catch {
       setIsSubmitted(false);
       setIsLoading(false);
       setError("An error occurred during login");

@@ -254,8 +254,8 @@ export default function Trading() {
               <BuySell
                 key={symbol} // Force remount when symbol changes
                 symbol={symbol}
-                buyPrice={toDisplayPrice(prices.askPrice)}
-                sellPrice={toDisplayPrice(prices.bidPrice)}
+                buyPrice={prices.askPrice}
+                sellPrice={prices.bidPrice}
               />
             </div>
           </div>
