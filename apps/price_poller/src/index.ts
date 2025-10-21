@@ -41,10 +41,6 @@ async function main() {
         const price = toInternalPrice(msg.p);   //msg.p (price)
         const qty = toInternalPrice(msg.q);        //ssmg.1 (quantity)
 
-        // Debug logging for ETH prices (10% sample)
-        if (msg.s === "ETHUSDT" && Math.random() < 0.1) {
-          console.log(`🔍 Binance ETH: raw="${msg.p}" → internal=${price} → display=$${(price/10000).toFixed(2)}`);
-        }
 
         try {
           await pushToRedis(redis, price, msg.s, msg.T);
