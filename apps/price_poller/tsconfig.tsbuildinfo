@@ -1,1 +1,0 @@
-{"root":["./src/dbconfig.ts","./src/dbops.ts","./src/index.ts","./src/redisops.ts","./src/utils.ts"],"version":"5.9.2"}

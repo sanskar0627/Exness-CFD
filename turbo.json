@@ -5,7 +5,7 @@
     "build": {
       "dependsOn": ["^build"],
       "inputs": ["$TURBO_DEFAULT$", ".env*"],
-      "outputs": ["dist/**", ".next/**", "!.next/cache/**"]
+      "outputs": [".next/**", "!.next/cache/**"]
     },
     "lint": {
       "dependsOn": ["^lint"]
@@ -16,16 +16,6 @@
     "dev": {
       "cache": false,
       "persistent": true
-    },
-    "start": {
-      "cache": false,
-      "persistent": true
-    },
-    "docker:start": {
-      "cache": false
-    },
-    "docker:stop": {
-      "cache": false
     }
   }
 }

@@ -1,27 +1,20 @@
 {
-  "name": "exness_cfd",
+  "name": "Exness Cfd",
   "private": true,
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
-    "start": "turbo run start",
     "lint": "turbo run lint",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
-    "check-types": "turbo run check-types",
-    "redis": "docker run -d --name redis_service -p 6379:6379 redis:alpine",
-    "redis:stop": "docker stop redis_service && docker rm redis_service",
-    "clean": "npm run redis:stop || exit 0"
+    "check-types": "turbo run check-types"
   },
   "devDependencies": {
     "prettier": "^3.6.2",
     "turbo": "^2.5.8",
     "typescript": "5.9.2"
   },
+  "packageManager": "pnpm@9.0.0",
   "engines": {
     "node": ">=18"
-  },
-  "packageManager": "npm@11.6.0",
-  "workspaces": [
-    "apps/*"
-  ]
+  }
 }
