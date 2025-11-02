@@ -1,5 +1,5 @@
 {
-  "name": "shared",
+  "name": "price_poller",
   "module": "src/index.ts",
   "type": "module",
   "private": true,
@@ -8,5 +8,10 @@
   },
   "peerDependencies": {
     "typescript": "^5"
+  },
+  "dependencies": {
+    "@types/ws": "^8.18.1",
+    "ws": "^8.18.3",
+    "shared": "workspace:*"
   }
 }
