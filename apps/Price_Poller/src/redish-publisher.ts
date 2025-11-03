@@ -1,5 +1,6 @@
 import { createClient } from "redis";
 import { binanceEmitter } from "./binance";
+import type { Trades } from "./binance";
 
 const redis = createClient({
   url: process.env.REDIS_URL || "redis://localhost:6379",
@@ -13,12 +14,17 @@ interface typeofredishPriceData {
   decimals: number;
   time: number;
 }
+
+let tradeListener: ((tradeData: Trades) => Promise<void>) | null = null;
+let isShuttingDown = false;
+
 export async function startRedis() {
   try {
     await redis.connect();
     console.log("Redis Connected Sucessfully !!!!!!!!!");
+
     //  getting the data from binance emitter
-    binanceEmitter.on("trade", async (tradeData) => {
+    tradeListener = async (tradeData: Trades) => {
       try {
         const redisPriceData: typeofredishPriceData = {
           symbol: tradeData.symbol.replace("USDT", ""),
@@ -32,11 +38,44 @@ export async function startRedis() {
       } catch (err) {
         console.error("Error publishing trade:", err);
       }
-    });
+    };
+
+    binanceEmitter.on("trade", tradeListener);
   } catch (err) {
     console.error("Error Connecting to Redis ", err);
-    setTimeout(() => {
-      startRedis();
-    }, 3000);
+
+    if (tradeListener) {
+      binanceEmitter.removeListener("trade", tradeListener);
+    }
+
+    if (!isShuttingDown) {
+      setTimeout(() => {
+        startRedis();
+      }, 3000);
+    }
   }
 }
+
+async function gracefulShutdown(signal: string) {
+  isShuttingDown = true;
+  console.log(`${signal} received: Shutting down Redis publisher...`);
+
+  try {
+    if (tradeListener) {
+      binanceEmitter.removeListener("trade", tradeListener);
+    }
+
+    if (redis.isOpen) {
+      await redis.quit();
+      console.log("Redis disconnected successfully");
+    }
+  } catch (error) {
+    console.error("Error during Redis shutdown:", error);
+    if (redis.isOpen) {
+      await redis.disconnect();
+    }
+  }
+}
+
+process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+process.on("SIGINT", () => gracefulShutdown("SIGINT"));

@@ -2,19 +2,23 @@ import { BINANCE_STREAMS, toInternalPrice } from "shared";
 import { WebSocket } from "ws";
 import { EventEmitter } from "events"; // build in function to emit things across the code
 
- export interface Trades {
-    tradeId: number;   
-    symbol: string;    
-    price: number;    
-    quantity: string;  
-    timestamp: number; 
-  }
+export interface Trades {
+  tradeId: number;
+  symbol: string;
+  price: number;
+  quantity: string;
+  timestamp: number;
+}
 // Export the event emitter so other modules can listen
 export const binanceEmitter = new EventEmitter();
+let wss: WebSocket | null = null;
+let reconnectTimeout: NodeJS.Timeout | null = null;
+let isShuttingDown = false;
 
 export function startBinance() {
+  if (isShuttingDown) return;
   try {
-    const wss = new WebSocket("wss://stream.binance.com:9443"); //connecting to binance
+    wss = new WebSocket("wss://stream.binance.com:9443"); //connecting to binance
     //ON opening of Websocket
     wss.on("open", () => {
       console.log(" Binance WebSocket is Connected");
@@ -25,7 +29,7 @@ export function startBinance() {
         id: 1,
       };
       //sending subscription
-      wss.send(JSON.stringify(stream));
+      wss?.send(JSON.stringify(stream));
     });
     // Data Coming from Binance
     wss.on("message", (data: Buffer) => {
@@ -49,9 +53,10 @@ export function startBinance() {
     });
     // when websocket is clsoing
     wss.on("close", () => {
+      if (isShuttingDown) return;
       console.log("Websocket conncetion is closed");
       //logic of reconnecting to the websocket after evry 3 seconds
-      setTimeout(() => {
+      reconnectTimeout = setTimeout(() => {
         console.log("Attempting to reconnect...");
         startBinance();
       }, 3000);
@@ -63,9 +68,31 @@ export function startBinance() {
     });
   } catch (err) {
     console.error(" Fatal error in startBinance webscoket:", err);
-    setTimeout(() => {
-      console.log("Attempting to reconnect...");
-      startBinance()
-    }, 3000);
+    if (!isShuttingDown) {
+      reconnectTimeout = setTimeout(() => {
+        console.log("Attempting to reconnect...");
+        startBinance();
+      }, 3000);
+    }
   }
 }
+
+async function gracefulShutdown(signal: string) {
+  isShuttingDown = true;
+  console.log(`${signal} received: Shutting down Binance WebSocket...`);
+
+  if (reconnectTimeout) {
+    clearTimeout(reconnectTimeout);
+    reconnectTimeout = null;
+  }
+
+  if (wss) {
+    wss.close();
+    wss = null;
+  }
+
+  console.log("Binance WebSocket stopped");
+}
+
+process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+process.on("SIGINT", () => gracefulShutdown("SIGINT"));
