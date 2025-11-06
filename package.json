@@ -9,6 +9,7 @@
     "check-types": "turbo run check-types"
   },
   "devDependencies": {
+    "@types/ws": "^8.18.1",
     "prettier": "^3.6.2",
     "prisma": "6.17.1",
     "turbo": "^2.5.8",
@@ -23,6 +24,8 @@
     "packages/*"
   ],
   "dependencies": {
-    "@prisma/client": "6.17.1"
+    "@prisma/client": "6.17.1",
+    "redis": "^5.9.0",
+    "ws": "^8.18.3"
   }
 }

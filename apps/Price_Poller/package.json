@@ -1,0 +1,19 @@
+{
+  "name": "price_poller",
+  "module": "src/index.ts",
+  "type": "module",
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@types/ws": "^8.18.1",
+    "kafkajs": "^2.2.4",
+    "shared": "workspace:*",
+    "database": "workspace:*",
+    "ws": "^8.18.3"
+  }
+}
