@@ -22,9 +22,11 @@ const kafka = new Kafka({
 
 const producer = kafka.producer(); // create producer instance
 
-let tradeListener: ((tradeData: Trades) => Promise<void>) | null = null; //  Properly typed listener - Store it to remove later and prevent memory leaks
+let tradeListener: ((tradeData: Trades) => Promise<void>) | null = null; //  Properly typed listener Store it to remove later and prevent memory leaks
+let isShuttingDown = false;
 
 export async function kafkaproduce() {
+  if (isShuttingDown) return;
   try {
     //Connceting kafka producer
     await producer.connect();
@@ -49,11 +51,11 @@ export async function kafkaproduce() {
             },
           ],
         });
-      } catch (error) {
+      } catch (error) { 
         console.error("Error processing kafka trade data:", error);
       }
     };
-    //getting the data from binace.ts ws emii {functioon call heppening}
+    //getting the data from binace.ts ws emiiter{functioon call heppening}
     binanceEmitter.on("trade", tradeListener);
   } catch (err) {
     console.error(
@@ -64,14 +66,17 @@ export async function kafkaproduce() {
     if (tradeListener) {
       binanceEmitter.removeListener("trade", tradeListener);
     }
-    setTimeout(() => {
-      kafkaproduce();
-    }, 3000);
+
+    if (!isShuttingDown) {
+      setTimeout(() => {
+        kafkaproduce();
+      }, 3000);
+    }
   }
 }
 
 async function gracefulShutdown(signal: string) {  // signal is a string like "SIGTERM", "SIGINT" basically the type :signal
- 
+  isShuttingDown = true;
   console.log(`${signal} received: Starting graceful shutdown...`);
   try {
     if (tradeListener) {
