@@ -131,10 +131,8 @@ async function gracefulShutdown(signal: string) {
     }
 
     console.log(" Graceful shutdown complete");
-    process.exit(0);
   } catch (error) {
     console.error(" Error during graceful shutdown:", error);
-    process.exit(1);
   }
 }
 

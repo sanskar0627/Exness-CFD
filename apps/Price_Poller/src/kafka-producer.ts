@@ -85,10 +85,8 @@ async function gracefulShutdown(signal: string) {  // signal is a string like "S
 
     await producer.disconnect();
     console.log("Kafka producer disconnected successfully");
-    process.exit(0);
   } catch (error) {
     console.error("Error during Kafka producer shutdown:", error);
-    process.exit(1);
   }
 }
 
