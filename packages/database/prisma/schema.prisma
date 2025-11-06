@@ -13,7 +13,7 @@ model Trade {
   id        BigInt   @default(autoincrement())
   symbol    String
   price     BigInt
-  tradeId   BigInt        //Binance’s own trade ID for avoid inserting duplicates
+  tradeId   BigInt        @unique //Binance’s own trade ID for avoid inserting duplicates
   timestamp DateTime @db.Timestamptz(3)
   quantity  Decimal  @db.Decimal(20, 8) // 20 digits aloowed and 8 digits after decimal
 

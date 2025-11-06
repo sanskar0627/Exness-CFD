@@ -13,6 +13,7 @@
     "@types/ws": "^8.18.1",
     "kafkajs": "^2.2.4",
     "shared": "workspace:*",
+    "database": "workspace:*",
     "ws": "^8.18.3"
   }
 }
