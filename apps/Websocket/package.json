@@ -1,0 +1,20 @@
+{
+  "name": "websocket",
+  "module": "src/index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "bun --hot src/index.ts",
+    "build": "bun build src/index.ts --outdir dist --target bun"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/ws": "^8.18.1",
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "ws": "^8.18.3",
+    "redis": "^5.9.0",
+    "shared": "workspace:*"
+  }
+}

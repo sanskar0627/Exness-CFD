@@ -32,6 +32,19 @@
         "typescript": "^5",
       },
     },
+    "apps/Websocket": {
+      "name": "websocket",
+      "dependencies": {
+        "redis": "^5.9.0",
+        "shared": "workspace:*",
+        "ws": "^8.18.3",
+      },
+      "devDependencies": {
+        "@types/bun": "latest",
+        "@types/ws": "^8.18.1",
+        "typescript": "^5",
+      },
+    },
     "packages/database": {
       "name": "database",
       "dependencies": {
@@ -652,6 +665,8 @@
     "undici-types": ["undici-types@7.16.0", "", {}, "sha512-Zz+aZWSj8LE6zoxD+xrjh4VfkIG8Ya6LvYkZqtUQGJPZjYl53ypCaUwWqo7eI0x66KBGeRo+mlBEkMSeSZ38Nw=="],
 
     "uri-js": ["uri-js@4.4.1", "", { "dependencies": { "punycode": "^2.1.0" } }, "sha512-7rKUyy33Q1yc98pQ1DAmLtwX109F7TIfWlW1Ydo8Wl1ii1SeHieeh0HHfPeL2fMXK6z0s8ecKs9frCuLJvndBg=="],
+
+    "websocket": ["websocket@workspace:apps/Websocket"],
 
     "which": ["which@2.0.2", "", { "dependencies": { "isexe": "^2.0.0" }, "bin": { "node-which": "./bin/node-which" } }, "sha512-BLI3Tl1TW3Pvl70l3yq3Y64i+awpwXqsGBYWkkqMtnbXgrMD+yj7rhW0kuEDxzJaYXGjEW5ogapKNMEKNMjibA=="],
 
