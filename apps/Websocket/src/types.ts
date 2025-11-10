@@ -30,5 +30,4 @@ export interface ClientInfo {
   id: string;
   subscriptions: Set<Asset>; // Which symbols they're tracking
   connectedAt: Date;
-  lastPingAt?: Date; //  for heartbeat tracking
 }

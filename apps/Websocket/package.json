@@ -13,8 +13,9 @@
     "typescript": "^5"
   },
   "dependencies": {
-    "ws": "^8.18.3",
+    "crypto": "^1.0.1",
     "redis": "^5.9.0",
-    "shared": "workspace:*"
+    "shared": "workspace:*",
+    "ws": "^8.18.3"
   }
 }
