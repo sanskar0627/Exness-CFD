@@ -1,5 +1,6 @@
 import { Asset, SUPPORTED_ASSETS } from "shared";
 import { randomUUID } from "crypto";
+import {  WebSocket } from "ws";
 import type {
   ClientMessage,
   PriceUpdate,
