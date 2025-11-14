@@ -1,0 +1,39 @@
+{
+  "compilerOptions": {
+    // Target and module settings
+    "target": "ESNext",
+    "module": "ESNext",
+    "lib": ["ESNext"],
+
+    // Module resolution
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "moduleDetection": "force",
+
+    // Project structure
+    "outDir": "./dist",
+
+    // Type checking
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowJs": true,
+    "noFallthroughCasesInSwitch": true,
+
+    // Advanced options
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+
+    // Path aliases for workspace packages
+    "paths": {
+      "shared": ["../../packages/shared/src/index.ts"],
+      "database": ["../../packages/database/src/index.ts"]
+    },
+
+    // Bun types
+    "types": ["bun"]
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"]
+}
