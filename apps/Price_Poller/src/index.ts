@@ -15,7 +15,7 @@ export async function startTrade() {
 // Coordinated graceful shutdown  waits for all components to finish cleanup
 async function gracefulShutdown(signal: string) {
   console.log(`\n${signal} received: Coordinating Price_Poller shutdown...`);
-  await new Promise(resolve => setTimeout(resolve, 3000)); 
+  await new Promise((resolve) => setTimeout(resolve, 3000));
 
   console.log("Price_Poller shutdown complete. Exiting...");
   process.exit(0);

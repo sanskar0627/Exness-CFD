@@ -65,15 +65,14 @@ function handlePriceUpdate(asset: Asset, mssg: string) {
       symbol: newData.symbol,
       bidPrice: newData.bidPrice,
       askPrice: newData.askPrice,
-      decimals:  newData.decimals,
+      decimals: newData.decimals,
       time: newData.time,
     };
-     let response: ServerMessage = {
-        type: "PRICE_UPDATE",
-        data: PriceChange,
-      };
-      SubsManager.broadcast(asset,response);
-
+    let response: ServerMessage = {
+      type: "PRICE_UPDATE",
+      data: PriceChange,
+    };
+    SubsManager.broadcast(asset, response);
   } catch (err) {
     console.error("Can't Able to Update Price", err);
   }
@@ -102,7 +101,7 @@ function handleClientMessage(ws: WebSocket, mssg: RawData) {
     ///for the  Error and wrong types this will throw error
     else {
       ws.send(
-        JSON.stringify({ type: "ERROR", message: "Unknown message type" })
+        JSON.stringify({ type: "ERROR", message: "Unknown message type" }),
       );
     }
   } catch (err) {

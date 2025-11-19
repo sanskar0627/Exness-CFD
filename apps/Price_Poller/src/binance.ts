@@ -15,7 +15,7 @@ let wss: WebSocket | null = null;
 let reconnectTimeout: NodeJS.Timeout | null = null;
 let isShuttingDown = false;
 
-export  function startBinance() {
+export function startBinance() {
   if (isShuttingDown) return;
   try {
     wss = new WebSocket("wss://stream.binance.com:9443"); //connecting to binance

@@ -28,7 +28,7 @@ export function verifyToken(token: string): JWTPayload | null {
     }
 
     const decoded = jwt.verify(token, secret) as JWTPayload;
-     console.log(`[JWT VERIFIED] User: ${decoded.userId} | Token Valid`);
+    console.log(`[JWT VERIFIED] User: ${decoded.userId} | Token Valid`);
     return decoded;
   } catch (err) {
     console.error("Invalid Token!", err);

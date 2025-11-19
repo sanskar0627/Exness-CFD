@@ -51,7 +51,7 @@ export async function kafkaproduce() {
             },
           ],
         });
-      } catch (error) { 
+      } catch (error) {
         console.error("Error processing kafka trade data:", error);
       }
     };
@@ -60,7 +60,7 @@ export async function kafkaproduce() {
   } catch (err) {
     console.error(
       "problem in connecting with kafka retrying in 3 seconds",
-      err
+      err,
     );
     //  Remove old listener before reconnecting to prevent duplicates
     if (tradeListener) {
@@ -75,7 +75,8 @@ export async function kafkaproduce() {
   }
 }
 
-async function gracefulShutdown(signal: string) {  // signal is a string like "SIGTERM", "SIGINT" basically the type :signal
+async function gracefulShutdown(signal: string) {
+  // signal is a string like "SIGTERM", "SIGINT" basically the type :signal
   isShuttingDown = true;
   console.log(`${signal} received: Starting graceful shutdown...`);
   try {

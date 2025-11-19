@@ -11,7 +11,11 @@ declare global {
   }
 }
 
-export function authMiddleware(req: Request, res: Response, next: NextFunction): void {
+export function authMiddleware(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): void {
   //getting th evalue from the header
   const header = req.headers.authorization;
   const token = header?.split(" ")[1];

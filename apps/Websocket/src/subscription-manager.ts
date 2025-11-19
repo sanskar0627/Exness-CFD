@@ -1,6 +1,6 @@
 import { Asset, SUPPORTED_ASSETS } from "shared";
 import { randomUUID } from "crypto";
-import {  WebSocket } from "ws";
+import { WebSocket } from "ws";
 import type {
   ClientMessage,
   PriceUpdate,
@@ -26,7 +26,7 @@ export class SubscriptionManager {
     this.clientSubscriptions.set(clientInfo.id, subscriptions);
     this.clientIdToWebSocket.set(clientInfo.id, ws);
     console.log(
-      `Client ${clientInfo.id} connected. Total clients: ${this.clients.size}`
+      `Client ${clientInfo.id} connected. Total clients: ${this.clients.size}`,
     );
   }
 
@@ -108,7 +108,7 @@ export class SubscriptionManager {
     }
     if (!issubscribers) {
       console.log(
-        "Warning: Asset not found in assetSubscribers - data inconsistency!"
+        "Warning: Asset not found in assetSubscribers - data inconsistency!",
       );
     }
   }
@@ -137,7 +137,7 @@ export class SubscriptionManager {
       }
     }
     console.log(
-      `Broadcast to ${clientSub.size} clients subscribed to ${asset}`
+      `Broadcast to ${clientSub.size} clients subscribed to ${asset}`,
     );
   }
 }

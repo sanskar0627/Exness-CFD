@@ -124,5 +124,5 @@ userRouter.get(
       console.error("[BALANCE] Error", err);
       res.status(500).json({ error: "internal serveral error" });
     }
-  }
+  },
 );

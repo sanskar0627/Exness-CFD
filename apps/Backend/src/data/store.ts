@@ -1,5 +1,6 @@
-import { User } from ".././types";
-import { toInternalUSD, Asset } from "shared";
+import { string } from "zod";
+import { Order, User, ClosedOrder, PriceData } from ".././types";
+import { toInternalUSD, Asset, SUPPORTED_ASSETS } from "shared";
 
 //Storing in In Memory right now The USer Details
 export const StoreData = new Map<string, User>();
@@ -8,6 +9,13 @@ const INITIAL_BALANCE_USD: number =
 const INITIAL_BALANCE_CENTS = toInternalUSD(INITIAL_BALANCE_USD);
 //I am using this map just to store email on the index so i dont have to loop  through it
 const emailToUserId = new Map<string, string>();
+export const orderStorageMap = new Map<string, Map<string, Order>>(); // Order Storage map
+export const ClodeStorageMap = new Map<string, Map<string, ClosedOrder>>(); // close order Storage map
+export const PriceStorageMp = new Map<Asset, PriceData>(); // Stores the PRices of BTC<ETH AND SOL realtime  for liquidation and logic calucltion
+// Initialize PRICESTORE with default values
+SUPPORTED_ASSETS.forEach((asset) => {
+  PriceStorageMp.set(asset, { bid: 0, ask: 0 }); //Without this, if someone tries to get BTC price, they'll get undefined! initilizing with zero to evey coin
+});
 
 //USer Created
 export function CreateUser(userId: string, email: string, password: string) {
@@ -25,7 +33,7 @@ export function CreateUser(userId: string, email: string, password: string) {
   return USerObj;
 }
 export function findUser(email: string): User | undefined {
-  const USer = emailToUserId.get(email); // 
+  const USer = emailToUserId.get(email); //
   if (!USer) {
     console.log("No User Found !!!!!!!!");
     return undefined;
@@ -92,3 +100,19 @@ export function GetUserAsset(userId: string, asset: Asset): number {
   );
   return quantity;
 }
+export function getUserOrders(userId: string): Map<string, Order> {
+  const result = orderStorageMap.get(userId); //check user exsist
+  if (!result) {
+    orderStorageMap.set(userId, new Map<string, Order>());
+  }
+  return orderStorageMap.get(userId)!;
+}
+
+export function getUserCloseOrders(userId: string): Map<string, ClosedOrder> {
+  const result = ClodeStorageMap.get(userId); //To check user exsist
+  if (!result) {
+    ClodeStorageMap.set(userId, new Map<string, ClosedOrder>());
+  }
+  return ClodeStorageMap.get(userId)!;
+}
+
