@@ -39,7 +39,7 @@ export const signinSchema = z.object({
 // Trading Types
 export type OrderType = "buy" | "sell";
 export type OrderStatus = "OPEN" | "CLOSED" | "LIQUIDATED";
-
+export type reasonForClose ="manual"| "take_profit"| "stop_loss"| "liquidation";
 export interface Order {
   orderId: string; // UUID
   userId: string; // UUID
