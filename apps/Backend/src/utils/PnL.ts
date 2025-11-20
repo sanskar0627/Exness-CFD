@@ -1,6 +1,6 @@
 import { OrderType } from "../types";
 
-export function calculatePnLCents(
+export function calculatePnLCents( //calculation of normal profit and loss 
   openPrice: number,
   closePrice: number,
   marginCent: number,
@@ -25,4 +25,19 @@ export function calculatePnLCents(
   }
 
   return Number(profitandLoss);
+}
+
+// calultion of liuidadtion price
+export function calculateLiquidation(openPrice:number,leverage:number,side:OrderType):number{
+const op = BigInt(openPrice);
+const lg = BigInt(leverage);
+let liqudationPrice:bigint = BigInt(0);
+if (side === "buy") {
+    //means we are calulating for long
+    liqudationPrice = (op*(lg-BigInt(1))/lg);
+  } else if (side === "sell") {//we are calculating for the short
+    liqudationPrice = (op*(lg+BigInt(1))/lg);
+  }
+
+  return Number(liqudationPrice);
 }
