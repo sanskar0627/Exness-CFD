@@ -1,4 +1,3 @@
-import { string } from "zod";
 import { Order, User, ClosedOrder, PriceData } from ".././types";
 import { toInternalUSD, Asset, SUPPORTED_ASSETS } from "shared";
 

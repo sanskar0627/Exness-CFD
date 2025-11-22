@@ -2,6 +2,7 @@ import express from "express";
 import type { Express, Request, Response } from "express";
 import cors from "cors";
 import { userRouter } from "./routes/user";
+import { tradeRoutes } from "./routes/trades";
 
 const app: Express = express();
 const port = Number(process.env.PORT) || 5000;
@@ -20,7 +21,8 @@ app.use(
 );
 
 app.use(express.json());
-app.use("/api/v1/user", userRouter);
+app.use("/api/v2/user", userRouter);
+app.use("/api/v2/trade", tradeRoutes);
 
 //catch all undefined routes
 app.use((req: Request, res: Response) => {
@@ -30,7 +32,8 @@ app.use((req: Request, res: Response) => {
 app.listen(port, () => {
   console.log(`
     Server running on port ${port}
-    User API: http://localhost:${port}/api/v1/user`);
+    User API: http://localhost:${port}/api/v2/user
+    Trade API: http://localhost:${port}/api/v2/trade`);
 });
 
 // Graceful shutdown
