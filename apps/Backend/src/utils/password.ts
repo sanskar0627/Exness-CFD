@@ -12,7 +12,7 @@ export function hashPassword(password: string): string {
 // Compare a plain text password with a hashed password (synchronous)
 export function comparePassword(
   plainPassword: string,
-  hashedPassword: string
+  hashedPassword: string,
 ): boolean {
   const isMatch = bcrypt.compareSync(plainPassword, hashedPassword);
   console.log(`[PASSWORD] Password comparison result: ${isMatch}`);

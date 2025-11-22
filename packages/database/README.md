@@ -1,1 +1,1 @@
-This is just Prisma Orm datbases just normal trade Table is stored here  from here its just skeleton wwe will convert this into hybertable through timescale db
+This is just Prisma Orm datbases just normal trade Table is stored here from here its just skeleton wwe will convert this into hybertable through timescale db
