@@ -8,7 +8,7 @@ import { PriceStorageMp } from "../data/store";
 import { calculateLiquidation } from "../utils/PnL";
 import { randomUUID } from "crypto";
 import { Order } from "../types";
-import { getUserOrders } from "../data/store";
+import { getUserOrders, getUserCloseOrders } from "../data/store";
 import { closeOrder } from "../utils/tradeUtils";
 
 export const tradeRoutes = Router();
@@ -165,7 +165,41 @@ tradeRoutes.get(
       stopLoss: order.stopLoss ? fromInternalPrice(order.stopLoss) : null, // if user has given
     }));
     res.status(200).json({
-      orders: transformedOrders
-  });
+      orders: transformedOrders,
+    });
+  }
+);
+//get the all the trades for trade history
+tradeRoutes.get(
+  "/history",
+  authMiddleware,
+  (req: Request, res: Response): void => {
+    const userId = req.userId;
+    if (!userId) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+    const CloseOrders = getUserCloseOrders(userId);
+    const arrayofUserorder = Array.from(CloseOrders.values());
+    const transformedOrders = arrayofUserorder.map((order) => ({
+      orderId: order.orderId,
+      userId: order.userId,
+      asset: order.asset,
+      type: order.type,
+      margin: fromInternalUSD(order.margin), // Convert cents to USD
+      leverage: order.leverage,
+      openPrice: fromInternalPrice(order.openPrice), // Convert internal to readable
+      openTimestamp: order.openTimestamp,
+      liquidationPrice: fromInternalPrice(order.liquidationPrice), // Convert internal to readable
+      takeProfit: order.takeProfit ? fromInternalPrice(order.takeProfit) : null, // if user has given
+      stopLoss: order.stopLoss ? fromInternalPrice(order.stopLoss) : null, // if user has given
+      closePrice: fromInternalPrice(order.closePrice), // Convert to readable
+      closeTimestamp: order.closeTimestamp, // Keep as-is
+      pnl: fromInternalUSD(order.pnl), // Convert cents to USD
+      closeReason: order.closeReason,
+    }));
+    res.status(200).json({
+      orders: transformedOrders,
+    });
   }
 );
