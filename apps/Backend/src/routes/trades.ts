@@ -1,16 +1,15 @@
-import express from "express";
 import { Router } from "express";
 import { Request, Response } from "express";
-import type { Asset, Leverage } from "shared";
 import { authMiddleware } from "../middleware/auth";
-import { openTradeSchema, OrderType } from "../types"
-import { CreateUser, findUser, findUSerId, UserBalance } from "../data/store";
+import { openTradeSchema } from "../types"
+import { findUSerId, } from "../data/store";
 import { toInternalUSD } from "shared";
 import { PriceStorageMp } from "../data/store"
 import { calculateLiquidation } from "../utils/PnL"
 import { randomUUID } from "crypto";
 import { Order } from "../types";
 import { getUserOrders } from "../data/store";
+import { closeOrder } from "../utils/tradeUtils";
 
 export const tradeRoutes = Router();
 
@@ -69,12 +68,55 @@ tradeRoutes.post("/open", authMiddleware, (req: Request, res: Response): void =>
         }
         //deduct margin from the balalnce  basically  debited the money 
         user.balance.usd_balance = user.balance.usd_balance - marginInCents;
-        const userOrders =getUserOrders(userId);
-        userOrders.set(orderId,orderDetails);
+        const userOrders = getUserOrders(userId);
+        userOrders.set(orderId, orderDetails);
         res.status(201).json({
             message: "Order created successfully",
             order: orderDetails
         });
     }
 
+})
+
+//close End point
+tradeRoutes.post("/close", authMiddleware, (req: Request, res: Response): void => {
+    const { OrderId } = req.body;
+    if (!OrderId) {
+        res.status(400).json({ error: "Invalid Input No OrderId Present" });
+        return;
+    }
+    const userId = req.userId;
+    if (!userId) {
+        res.status(404).json({ error: "User not found" });
+        return;
+    }
+    //getting user order
+    const userOrders = getUserOrders(userId);
+    const currentOrder = userOrders.get(OrderId);
+    if (!currentOrder) {
+        res.status(404).json({ error: "Invalid Input No Order and its value is  Present" });
+        return;
+    }
+    const currentPrice = PriceStorageMp.get(currentOrder.asset);//getting the closing price of that assert 
+    if (!currentPrice || currentPrice.ask === 0 || currentPrice.bid === 0) {
+        res.status(503).json({ error: "Price data not available" });
+        return;
+    }
+    const closePrice = currentOrder.type === "buy" ? currentPrice.bid : currentPrice.ask;//chossing opposte of what was choose priviouslly
+
+    try {
+        const pnl = closeOrder(userId, OrderId, closePrice, "manual");
+
+        // Convert PnL from cents to dollars
+        const pnlInDollars = pnl / 100;
+
+        res.status(200).json({
+            message: "Order closed successfully",
+            orderId: OrderId,
+            closePrice: closePrice,
+            pnl: pnlInDollars  // In USD
+        });
+    } catch (error) {
+        res.status(500).json({ error: "Failed to close order" });
+    }
 })
