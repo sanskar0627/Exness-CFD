@@ -26,10 +26,15 @@ export async function startRedis() {
     //  getting the data from binance emitter
     tradeListener = async (tradeData: Trades) => {
       try {
+        // tradeData.price is already in internal format (scaled by 10000)
+        // Apply 0.5% spread: bid is 0.5% lower, ask is 0.5% higher
+        const midPrice = tradeData.price;
+        const spreadAmount = Math.floor(midPrice * 0.005); // 0.5% spread
+        
         const redisPriceData: typeofredishPriceData = {
           symbol: tradeData.symbol.replace("USDT", ""),
-          askPrice: Math.round(tradeData.price * 1.005),
-          bidPrice: Math.round(tradeData.price * 0.995),
+          askPrice: midPrice + spreadAmount, // Higher price for buying
+          bidPrice: midPrice - spreadAmount, // Lower price for selling
           decimals: 4,
           time: Math.floor(tradeData.timestamp / 1000),
         };
