@@ -18,7 +18,7 @@ let isShuttingDown = false;
 export function startBinance() {
   if (isShuttingDown) return;
   try {
-    wss = new WebSocket("wss://stream.binance.com:9443"); //connecting to binance
+    wss = new WebSocket("wss://stream.binance.com:9443/ws"); //connecting to binance
     //ON opening of Websocket
     wss.on("open", () => {
       console.log(" Binance WebSocket is Connected");

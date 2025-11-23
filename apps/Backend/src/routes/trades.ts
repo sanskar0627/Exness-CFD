@@ -52,8 +52,8 @@ tradeRoutes.post(
         return; // Stop here, don't create the trade
       }
       //now checking the current price of the aseet ofr perfect calculation
-      const currentPrice = PriceStorageMp.get(asset);
-      if (currentPrice?.ask == 0 || currentPrice?.bid == 0 || !currentPrice) {
+      const priceData = PriceStorageMp.get(asset);
+      if (!priceData || priceData.ask === 0 || priceData.bid === 0) {
         res.status(503).json({
           error:
             "The Asset Price is not proplly updating still zero or Undefined",
@@ -61,7 +61,7 @@ tradeRoutes.post(
         return; // Stop here, don't create the trade
       }
       //calculation of  liquidation  price
-      const entryPrice = type === "buy" ? currentPrice.ask : currentPrice.bid;
+      const entryPrice = type === "buy" ? priceData.ask : priceData.bid;
       const liquidationPrice = calculateLiquidation(entryPrice, leverage, type);
       const orderId = randomUUID();
       const orderDetails: Order = {
@@ -113,13 +113,13 @@ tradeRoutes.post(
         .json({ error: "Invalid Input No Order and its value is  Present" });
       return;
     }
-    const currentPrice = PriceStorageMp.get(currentOrder.asset); //getting the closing price of that assert
-    if (!currentPrice || currentPrice.ask === 0 || currentPrice.bid === 0) {
+    const priceData = PriceStorageMp.get(currentOrder.asset); //getting the closing price of that assert
+    if (!priceData || priceData.ask === 0 || priceData.bid === 0) {
       res.status(503).json({ error: "Price data not available" });
       return;
     }
     const closePrice =
-      currentOrder.type === "buy" ? currentPrice.bid : currentPrice.ask; //chossing opposte of what was choose priviouslly
+      currentOrder.type === "buy" ? priceData.bid : priceData.ask; //chossing opposte of what was choose priviouslly
 
     try {
       const pnl = closeOrder(userId, OrderId, closePrice, "manual");
@@ -200,6 +200,43 @@ tradeRoutes.get(
     }));
     res.status(200).json({
       orders: transformedOrders,
+    });
+  }
+);
+
+// Get platform profit from spread (0.5% on open + 0.5% on close = 1% total)
+tradeRoutes.get(
+  "/platform-profit",
+  (req: Request, res: Response): void => {
+    const allClosedOrders = getUserCloseOrders("all");
+    const allOpenOrders = getUserOrders("all");
+    
+    let totalProfit = 0; // In cents
+    let openTradeCount = 0;
+    let closedTradeCount = 0;
+
+    // Calculate profit from OPEN orders (0.5% spread earned when user opened position)
+    allOpenOrders.forEach((order) => {
+      const positionSize = order.margin * order.leverage; // Total position value in cents
+      const spreadProfit = Math.floor(positionSize * 0.005); // 0.5% spread on open
+      totalProfit += spreadProfit;
+      openTradeCount++;
+    });
+
+    // Calculate profit from CLOSED orders (FULL 1% - 0.5% on open + 0.5% on close)
+    allClosedOrders.forEach((order) => {
+      const positionSize = order.margin * order.leverage; // Total position value in cents
+      const spreadProfit = Math.floor(positionSize * 0.01); // 1% total spread (open + close)
+      totalProfit += spreadProfit;
+      closedTradeCount++;
+    });
+
+    res.status(200).json({
+      totalProfit: fromInternalUSD(totalProfit), // Convert to USD
+      openTrades: openTradeCount,
+      closedTrades: closedTradeCount,
+      totalTrades: openTradeCount + closedTradeCount,
+      profitInCents: totalProfit,
     });
   }
 );

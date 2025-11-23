@@ -100,6 +100,17 @@ export function GetUserAsset(userId: string, asset: Asset): number {
   return quantity;
 }
 export function getUserOrders(userId: string): Map<string, Order> {
+  // Special case: "all" returns combined orders from all users
+  if (userId === "all") {
+    const allOrders = new Map<string, Order>();
+    orderStorageMap.forEach((userOrders) => {
+      userOrders.forEach((order, orderId) => {
+        allOrders.set(orderId, order);
+      });
+    });
+    return allOrders;
+  }
+  
   const result = orderStorageMap.get(userId); //check user exsist
   if (!result) {
     orderStorageMap.set(userId, new Map<string, Order>());
@@ -108,6 +119,17 @@ export function getUserOrders(userId: string): Map<string, Order> {
 }
 
 export function getUserCloseOrders(userId: string): Map<string, ClosedOrder> {
+  // Special case: "all" returns combined orders from all users
+  if (userId === "all") {
+    const allOrders = new Map<string, ClosedOrder>();
+    ClodeStorageMap.forEach((userOrders) => {
+      userOrders.forEach((order, orderId) => {
+        allOrders.set(orderId, order);
+      });
+    });
+    return allOrders;
+  }
+  
   const result = ClodeStorageMap.get(userId); //To check user exsist
   if (!result) {
     ClodeStorageMap.set(userId, new Map<string, ClosedOrder>());

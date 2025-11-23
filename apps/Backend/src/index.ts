@@ -3,6 +3,7 @@ import type { Express, Request, Response } from "express";
 import cors from "cors";
 import { userRouter } from "./routes/user";
 import { tradeRoutes } from "./routes/trades";
+import { assetRouter } from "./routes/asset";
 
 const app: Express = express();
 const port = Number(process.env.PORT) || 5000;
@@ -10,6 +11,7 @@ const port = Number(process.env.PORT) || 5000;
 const allowedOrigins = Bun.env.CORS_ORIGINS?.split(",") || [
   "http://localhost:3000",
   "http://localhost:5173",
+  "http://localhost:5174",
 ];
 
 // Apply CORS middleware
@@ -23,6 +25,7 @@ app.use(
 app.use(express.json());
 app.use("/api/v2/user", userRouter);
 app.use("/api/v2/trade", tradeRoutes);
+app.use("/api/v2/asset", assetRouter);
 
 //catch all undefined routes
 app.use((req: Request, res: Response) => {
@@ -33,7 +36,8 @@ app.listen(port, () => {
   console.log(`
     Server running on port ${port}
     User API: http://localhost:${port}/api/v2/user
-    Trade API: http://localhost:${port}/api/v2/trade`);
+    Trade API: http://localhost:${port}/api/v2/trade
+    Asset API: http://localhost:${port}/api/v2/asset`);
 });
 
 // Graceful shutdown
