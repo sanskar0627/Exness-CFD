@@ -10,13 +10,17 @@ import { randomUUID } from "crypto";
 import { Order } from "../types";
 import { getUserOrders, getUserCloseOrders } from "../data/store";
 import { closeOrder } from "../utils/tradeUtils";
+import {
+  broadcastOrderClose,
+  broadcastOrderOpened,
+} from "../services/orderBroadcast";
 
 export const tradeRoutes = Router();
 
 tradeRoutes.post(
   "/open",
   authMiddleware,
-  (req: Request, res: Response): void => {
+  async (req: Request, res: Response): Promise<void> => {
     //checking that from body every response is thier or not
     const { asset, type, margin, leverage } = req.body; //extracted from body
     const validation = openTradeSchema.safeParse({
@@ -81,6 +85,11 @@ tradeRoutes.post(
       user.balance.usd_balance = user.balance.usd_balance - marginInCents;
       const userOrders = getUserOrders(userId);
       userOrders.set(orderId, orderDetails);
+      try {
+        await broadcastOrderOpened(orderDetails); //calling the function so it can send into redis
+      } catch (err) {
+        console.error("Failed to broadcast order, but trade succeeded:", err);
+      }
       res.status(201).json({
         message: "Order created successfully",
         order: orderDetails,
@@ -93,7 +102,7 @@ tradeRoutes.post(
 tradeRoutes.post(
   "/close",
   authMiddleware,
-  (req: Request, res: Response): void => {
+  async (req: Request, res: Response): Promise<void> => {
     const { OrderId } = req.body;
     if (!OrderId) {
       res.status(400).json({ error: "Invalid Input No OrderId Present" });
@@ -122,7 +131,7 @@ tradeRoutes.post(
       currentOrder.type === "buy" ? priceData.bid : priceData.ask; //chossing opposte of what was choose priviouslly
 
     try {
-      const pnl = closeOrder(userId, OrderId, closePrice, "manual");
+      const pnl = await closeOrder(userId, OrderId, closePrice, "manual");
 
       // Convert PnL from cents to dollars
       const pnlInDollars = pnl / 100;
@@ -205,38 +214,35 @@ tradeRoutes.get(
 );
 
 // Get platform profit from spread (0.5% on open + 0.5% on close = 1% total)
-tradeRoutes.get(
-  "/platform-profit",
-  (req: Request, res: Response): void => {
-    const allClosedOrders = getUserCloseOrders("all");
-    const allOpenOrders = getUserOrders("all");
-    
-    let totalProfit = 0; // In cents
-    let openTradeCount = 0;
-    let closedTradeCount = 0;
+tradeRoutes.get("/platform-profit", (req: Request, res: Response): void => {
+  const allClosedOrders = getUserCloseOrders("all");
+  const allOpenOrders = getUserOrders("all");
 
-    // Calculate profit from OPEN orders (0.5% spread earned when user opened position)
-    allOpenOrders.forEach((order) => {
-      const positionSize = order.margin * order.leverage; // Total position value in cents
-      const spreadProfit = Math.floor(positionSize * 0.005); // 0.5% spread on open
-      totalProfit += spreadProfit;
-      openTradeCount++;
-    });
+  let totalProfit = 0; // In cents
+  let openTradeCount = 0;
+  let closedTradeCount = 0;
 
-    // Calculate profit from CLOSED orders (FULL 1% - 0.5% on open + 0.5% on close)
-    allClosedOrders.forEach((order) => {
-      const positionSize = order.margin * order.leverage; // Total position value in cents
-      const spreadProfit = Math.floor(positionSize * 0.01); // 1% total spread (open + close)
-      totalProfit += spreadProfit;
-      closedTradeCount++;
-    });
+  // Calculate profit from OPEN orders (0.5% spread earned when user opened position)
+  allOpenOrders.forEach((order) => {
+    const positionSize = order.margin * order.leverage; // Total position value in cents
+    const spreadProfit = Math.floor(positionSize * 0.005); // 0.5% spread on open
+    totalProfit += spreadProfit;
+    openTradeCount++;
+  });
 
-    res.status(200).json({
-      totalProfit: fromInternalUSD(totalProfit), // Convert to USD
-      openTrades: openTradeCount,
-      closedTrades: closedTradeCount,
-      totalTrades: openTradeCount + closedTradeCount,
-      profitInCents: totalProfit,
-    });
-  }
-);
+  // Calculate profit from CLOSED orders (FULL 1% - 0.5% on open + 0.5% on close)
+  allClosedOrders.forEach((order) => {
+    const positionSize = order.margin * order.leverage; // Total position value in cents
+    const spreadProfit = Math.floor(positionSize * 0.01); // 1% total spread (open + close)
+    totalProfit += spreadProfit;
+    closedTradeCount++;
+  });
+
+  res.status(200).json({
+    totalProfit: fromInternalUSD(totalProfit), // Convert to USD
+    openTrades: openTradeCount,
+    closedTrades: closedTradeCount,
+    totalTrades: openTradeCount + closedTradeCount,
+    profitInCents: totalProfit,
+  });
+});
