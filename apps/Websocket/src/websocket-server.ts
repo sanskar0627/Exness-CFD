@@ -3,10 +3,14 @@ import { createClient, RedisClientType } from "redis";
 import { SUPPORTED_ASSETS, type Asset } from "shared";
 import { SubscriptionManager } from "./subscription-manager";
 import type { ClientMessage, ServerMessage, PriceUpdate } from "./types";
-
+import { forEachChild } from "typescript";
+let orderRedis: RedisClientType = createClient({
+    url: process.env.REDIS_URL || "redis://localhost:6379"
+  });
 const redis = createClient({
   url: process.env.REDIS_URL || "redis://localhost:6379",
 });
+
 const wss = new WebSocketServer({ port: 8080 });
 const SubsManager = new SubscriptionManager();
 let isShuttingDown = false;
@@ -20,12 +24,19 @@ async function connectRedis() {
   try {
     await redis.connect();
     console.log("Redish Connect In WebSokcet !!!!!!!!!!!");
+    await orderRedis.connect();
+  console.log("Order Redis connected for pattern subscriptions!");
+    
     for (const asset of SUPPORTED_ASSETS) {
       await redis.subscribe(asset, (mssg) => {
         handlePriceUpdate(asset, mssg);
       });
       console.log(`Subscribed to ${asset}`);
     }
+     await orderRedis.pSubscribe("orders:*", (message, channel) => {
+    handleOrderUpdate(channel, message);
+  });
+  console.log("Subscribed to pattern: orders:*");
   } catch (err) {
     console.error("Failed to Connect with redish Truing in 3 Sec");
     setTimeout(() => {
@@ -109,6 +120,47 @@ function handleClientMessage(ws: WebSocket, mssg: RawData) {
   }
 }
 
+// Handle order updates from Redis (orders:* pattern)
+function handleOrderUpdate(channel: string, message: string) {
+  try {
+    console.log(`Received order update on ${channel}:`, message);
+    const userId = channel.split(":")[1];
+  if (!userId) {
+    console.error("Invalid channel format:", channel);
+    return;
+  }
+  const orderMessage = JSON.parse(message);
+  const messageType=orderMessage.type;
+  const messageData=orderMessage.data;
+  
+  const serverMessage = {
+    type: messageType, // sending message type 
+    data: messageData // sending message data
+  } as ServerMessage;
+  
+  // Broadcast order update to all clients subscribed to this user's orders
+  const userConnections: WebSocket[] = [];
+  SubsManager.clients.forEach((clientInfo, ws) => {
+    if (clientInfo.userId === userId) {
+      userConnections.push(ws);
+    }
+  });
+  if (userConnections.length === 0) {
+    console.log(`No active connections for user ${userId}`);
+    return;
+  }
+  userConnections.forEach((ws) => {
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(serverMessage));
+    }
+  });
+  console.log(`Sent ${messageType} to ${userConnections.length} connections for user ${userId}`);
+
+  } catch (err) {
+    console.error("Error handling order update:", err);
+  }
+}
+
 // Graceful shutdown function
 async function gracefulShutdown() {
   // Prevent multiple shutdown attempts
@@ -128,8 +180,11 @@ async function gracefulShutdown() {
   });
 
   // Disconnect from Redis
-  await redis.disconnect();
+  await redis.quit();
   console.log("Redis disconnected");
+
+  await orderRedis.quit();
+  console.log("Order Redis disconnected");
 
   console.log("Graceful shutdown complete");
   process.exit(0);
