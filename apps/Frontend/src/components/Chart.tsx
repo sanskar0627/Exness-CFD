@@ -37,6 +37,8 @@ export default function ChartComponent({
   const chartRef = useRef<IChartApi | null>(null);
   const [tooltip, setTooltip] = useState<string | null>(null);
   const [tooltipVisible, setTooltipVisible] = useState<boolean>(false);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
   const tooltipTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -78,86 +80,103 @@ export default function ChartComponent({
     let isCleanedUp = false;
 
     const initChart = async () => {
-      chart = createChart(chartContainerRef.current!, {
-        layout: {
-          background: {
-            type: ColorType.VerticalGradient,
-            topColor: "#141D22",
-            bottomColor: "#141D22",
+      try {
+        setLoading(true);
+        setError(null);
+
+        chart = createChart(chartContainerRef.current!, {
+          layout: {
+            background: {
+              type: ColorType.VerticalGradient,
+              topColor: "#141D22",
+              bottomColor: "#141D22",
+            },
+            textColor: "#FFFFFF",
           },
-          textColor: "#FFFFFF",
-        },
-        width: chartContainerRef.current!.clientWidth,
-        height: chartContainerRef.current!.clientHeight,
-        timeScale: {
-          timeVisible: true,
-          secondsVisible: false,
-        },
-        localization: {
-          timeFormatter: (timestamp: any) => {
-            const date = new Date(timestamp * 1000);
-            const hours = date.getHours().toString().padStart(2, '0');
-            const minutes = date.getMinutes().toString().padStart(2, '0');
-            return `${hours}:${minutes}`;
+          width: chartContainerRef.current!.clientWidth,
+          height: chartContainerRef.current!.clientHeight,
+          timeScale: {
+            timeVisible: true,
+            secondsVisible: false,
           },
-        },
-      });
+          localization: {
+            timeFormatter: (timestamp: any) => {
+              const date = new Date(timestamp * 1000);
+              const hours = date.getHours().toString().padStart(2, "0");
+              const minutes = date.getMinutes().toString().padStart(2, "0");
+              return `${hours}:${minutes}`;
+            },
+          },
+        });
 
-      candlestickSeries = chart.addSeries(CandlestickSeries, {
-        upColor: "#158BF9",
-        downColor: "#EB483F",
-        borderVisible: false,
-        wickUpColor: "#158BF9",
-        wickDownColor: "#EB483F",
-      });
+        candlestickSeries = chart.addSeries(CandlestickSeries, {
+          upColor: "#158BF9",
+          downColor: "#EB483F",
+          borderVisible: false,
+          wickUpColor: "#158BF9",
+          wickDownColor: "#EB483F",
+        });
 
-      const tickWrapper = (trade: Trade) => {
-        // Check if component has been cleaned up
-        if (isCleanedUp) {
-          return;
-        }
+        const tickWrapper = (trade: Trade) => {
+          // Check if component has been cleaned up
+          if (isCleanedUp) {
+            return;
+          }
 
-        // CRITICAL: Check if this trade is for the current symbol FIRST
-        // This prevents BTC prices from showing on ETH/SOL charts during symbol switches
-        if (!trade.symbol || trade.symbol !== symbol) {
-          return;
-        }
+          // CRITICAL: Check if this trade is for the current symbol FIRST
+          // This prevents BTC prices from showing on ETH/SOL charts during symbol switches
+          if (!trade.symbol || trade.symbol !== symbol) {
+            return;
+          }
 
-        // Only update prices AFTER confirming correct symbol
-        const prices = {
-          bidPrice: trade.bidPrice || 0,
-          askPrice: trade.askPrice || 0,
+          // Only update prices AFTER confirming correct symbol
+          const prices = {
+            bidPrice: trade.bidPrice || 0,
+            askPrice: trade.askPrice || 0,
+          };
+          if (onPriceUpdate && prices.bidPrice > 0 && prices.askPrice > 0) {
+            onPriceUpdate(prices);
+          }
+
+          const tick: RealtimeUpdate = {
+            symbol: trade.symbol,
+            bidPrice: trade.bidPrice,
+            askPrice: trade.askPrice,
+            time: Math.floor(Date.now() / 1000),
+          };
+
+          const candle = processRealupdate(tick, duration);
+
+          if (candle && candlestickSeries) {
+            candlestickSeries.update(candle);
+          }
         };
-        if (onPriceUpdate && prices.bidPrice > 0 && prices.askPrice > 0) {
-          onPriceUpdate(prices);
+
+        const rawData = await getChartData(symbol, duration);
+
+        // Check if component was cleaned up during async operation
+        if (isCleanedUp) return;
+
+        if (candlestickSeries) {
+          candlestickSeries.setData(rawData);
+        }
+        if (chart) {
+          chart.timeScale().fitContent();
         }
 
-        const tick: RealtimeUpdate = {
-          symbol: trade.symbol,
-          bidPrice: trade.bidPrice,
-          askPrice: trade.askPrice,
-          time: Math.floor(Date.now() / 1000),
-        };
+        const signalingManager = Signalingmanager.getInstance();
+        unwatch = signalingManager.watch(symbol, tickWrapper);
 
-        const candle = processRealupdate(tick, duration);
+        chartRef.current = chart;
+        setLoading(false);
+      } catch (err) {
+        // Check if component was cleaned up during async operation
+        if (isCleanedUp) return;
 
-        if (candle && candlestickSeries) {
-          candlestickSeries.update(candle);
-        }
-      };
-
-      const rawData = await getChartData(symbol, duration);
-      if (candlestickSeries) {
-        candlestickSeries.setData(rawData);
+        console.error("Failed to load chart data:", err);
+        setError("Failed to load chart data. Please try again.");
+        setLoading(false);
       }
-      if (chart) {
-        chart.timeScale().fitContent();
-      }
-
-      const signalingManager = Signalingmanager.getInstance();
-      unwatch = signalingManager.watch(symbol, tickWrapper);
-
-      chartRef.current = chart;
     };
 
     const handleResize = () => {
@@ -350,7 +369,44 @@ export default function ChartComponent({
             </button>
           </div>
         </div>
-        <div className="flex-grow">
+        <div className="flex-grow relative">
+          {loading && (
+            <div className="absolute inset-0 flex items-center justify-center bg-neutral-900/50 backdrop-blur-sm z-10">
+              <div className="flex flex-col items-center gap-3">
+                <div className="w-12 h-12 border-4 border-neutral-600 border-t-blue-500 rounded-full animate-spin"></div>
+                <p className="text-sm text-neutral-400">Loading chart data...</p>
+              </div>
+            </div>
+          )}
+          {error && !loading && (
+            <div className="absolute inset-0 flex items-center justify-center bg-neutral-900/50 backdrop-blur-sm z-10">
+              <div className="flex flex-col items-center gap-3 p-6 bg-neutral-800 border border-red-500/30 rounded-lg">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="48"
+                  height="48"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="text-red-500"
+                >
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <line x1="12" y1="8" x2="12" y2="12"></line>
+                  <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                </svg>
+                <p className="text-red-400 font-medium">{error}</p>
+                <button
+                  onClick={() => window.location.reload()}
+                  className="mt-2 px-4 py-2 bg-neutral-700 hover:bg-neutral-600 text-neutral-100 rounded-md transition-colors"
+                >
+                  Reload Page
+                </button>
+              </div>
+            </div>
+          )}
           <div ref={chartContainerRef} className="h-full w-full" />
         </div>
       </div>
