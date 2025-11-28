@@ -112,6 +112,18 @@ export class SubscriptionManager {
       );
     }
   }
+  setUserId(ws: WebSocket, userId: string): void {
+    //getting client from the map using ws
+    const clientInfo = this.clients.get(ws);
+    //check for the client
+    if (!clientInfo) {
+      console.log("Client Not Exsited to send data ");
+      return;
+    }
+    clientInfo.userId=userId;
+    console.log("The User is SUcessfully Authenticated")
+  }
+
 
   //Broadcasting
   broadcast(asset: Asset, message: ServerMessage): void {

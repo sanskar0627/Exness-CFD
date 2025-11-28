@@ -1,8 +1,10 @@
 import {getUserOrders,getUserCloseOrders, findUSerId,UserBalance,} from "../data/store";
 import { reasonForClose, ClosedOrder } from "../types";
 import { calculatePnLCents } from "./PnL";
+import { broadcastOrderClose } from "../services/orderBroadcast";
 
-export function closeOrder(userId: string,orderId: string,closePrice: number,closeReason: reasonForClose): number {
+
+export  async function closeOrder(userId: string,orderId: string,closePrice: number,closeReason: reasonForClose): Promise<number> {
   const userOrders = getUserOrders(userId); //ggeting all the user with  ordeid and orders 
   const order = userOrders.get(orderId);
 
@@ -28,6 +30,11 @@ export function closeOrder(userId: string,orderId: string,closePrice: number,clo
 
   const userClosedOrders = getUserCloseOrders(userId);
   userClosedOrders.set(orderId, closedOrder);
+  try{
+  await broadcastOrderClose(closedOrder, closeReason)
+  }catch(err){
+    console.error("Failed to broadcast order close, but order closed successfully:", err);
+  }
   userOrders.delete(orderId);
 
   const user = findUSerId(userId);

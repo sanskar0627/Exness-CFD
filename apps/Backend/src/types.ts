@@ -37,6 +37,7 @@ export const signinSchema = z.object({
 });
 
 // Trading Types
+export type TimeDurationCandel="1m"|"1d"|"1w";
 export type OrderType = "buy" | "sell";
 export type OrderStatus = "OPEN" | "CLOSED" | "LIQUIDATED";
 export type reasonForClose ="manual"| "take_profit"| "stop_loss"| "liquidation";
@@ -102,3 +103,13 @@ export const openTradeSchema = z.object({
 export const closeTradeSchema = z.object({
   orderId: z.string().min(1, "Order ID is required"),
 });
+
+export interface Candle {
+    time: number;
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+    volume: string;
+}
+export type ValidSymbol = "BTC" | "ETH" | "SOL";

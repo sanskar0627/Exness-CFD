@@ -9,11 +9,13 @@
   },
   "devDependencies": {
     "@types/bun": "latest",
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/ws": "^8.18.1",
     "typescript": "^5"
   },
   "dependencies": {
     "crypto": "^1.0.1",
+    "jsonwebtoken": "^9.0.2",
     "redis": "^5.9.0",
     "shared": "workspace:*",
     "ws": "^8.18.3"
