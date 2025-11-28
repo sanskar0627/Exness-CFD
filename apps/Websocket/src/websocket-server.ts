@@ -3,10 +3,11 @@ import { createClient, RedisClientType } from "redis";
 import { SUPPORTED_ASSETS, type Asset } from "shared";
 import { SubscriptionManager } from "./subscription-manager";
 import type { ClientMessage, ServerMessage, PriceUpdate } from "./types";
-import { forEachChild } from "typescript";
+import {Verifytokenws} from "./utils/wsjwt"
+
 let orderRedis: RedisClientType = createClient({
-    url: process.env.REDIS_URL || "redis://localhost:6379"
-  });
+  url: process.env.REDIS_URL || "redis://localhost:6379"
+});
 const redis = createClient({
   url: process.env.REDIS_URL || "redis://localhost:6379",
 });
@@ -25,18 +26,18 @@ async function connectRedis() {
     await redis.connect();
     console.log("Redish Connect In WebSokcet !!!!!!!!!!!");
     await orderRedis.connect();
-  console.log("Order Redis connected for pattern subscriptions!");
-    
+    console.log("Order Redis connected for pattern subscriptions!");
+
     for (const asset of SUPPORTED_ASSETS) {
       await redis.subscribe(asset, (mssg) => {
         handlePriceUpdate(asset, mssg);
       });
       console.log(`Subscribed to ${asset}`);
     }
-     await orderRedis.pSubscribe("orders:*", (message, channel) => {
-    handleOrderUpdate(channel, message);
-  });
-  console.log("Subscribed to pattern: orders:*");
+    await orderRedis.pSubscribe("orders:*", (message, channel) => {
+      handleOrderUpdate(channel, message);
+    });
+    console.log("Subscribed to pattern: orders:*");
   } catch (err) {
     console.error("Failed to Connect with redish Truing in 3 Sec");
     setTimeout(() => {
@@ -109,6 +110,23 @@ function handleClientMessage(ws: WebSocket, mssg: RawData) {
     } else if (message.type === "PING") {
       ws.send(JSON.stringify({ type: "PONG" }));
     }
+    //  to verify user and send auth with user id
+    else if (message.type === "AUTH") {
+      const verify=Verifytokenws(message.token);
+      if(!verify || verify==null){
+        console.log("The veification is not done or its Null");
+        let response: ServerMessage = {
+        type: "UNAUTHENTICATED",
+        message: "Inavlid TOKEN",
+      };
+        ws.send(JSON.stringify(response));
+        return;
+      }
+      const userid=verify.userId;
+
+      SubsManager.setUserId(ws,userid);
+      ws.send(JSON.stringify({ type: "AUTHENTICATED",userId:userid }));
+    }
     ///for the  Error and wrong types this will throw error
     else {
       ws.send(
@@ -125,36 +143,35 @@ function handleOrderUpdate(channel: string, message: string) {
   try {
     console.log(`Received order update on ${channel}:`, message);
     const userId = channel.split(":")[1];
-  if (!userId) {
-    console.error("Invalid channel format:", channel);
-    return;
-  }
-  const orderMessage = JSON.parse(message);
-  const messageType=orderMessage.type;
-  const messageData=orderMessage.data;
-  
-  const serverMessage = {
-    type: messageType, // sending message type 
-    data: messageData // sending message data
-  } as ServerMessage;
-  
-  // Broadcast order update to all clients subscribed to this user's orders
-  const userConnections: WebSocket[] = [];
-  SubsManager.clients.forEach((clientInfo, ws) => {
-    if (clientInfo.userId === userId) {
-      userConnections.push(ws);
+    if (!userId) {
+      console.error("Invalid channel format:", channel);
+      return;
     }
-  });
-  if (userConnections.length === 0) {
-    console.log(`No active connections for user ${userId}`);
-    return;
-  }
-  userConnections.forEach((ws) => {
-    if (ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify(serverMessage));
+    const orderMessage = JSON.parse(message);
+    const messageType = orderMessage.type;
+    const messageData = orderMessage.data;
+
+    const serverMessage = {
+      type: messageType, // sending message type 
+      data: messageData // sending message data
+    } as ServerMessage;
+    const userConnections: WebSocket[] = [];
+    // Broadcast order update to all clients subscribed to this user's orders
+    SubsManager.clients.forEach((clientInfo, ws) => {
+      if (clientInfo.userId === userId) {
+        userConnections.push(ws);
+      }
+    });
+    if (userConnections.length === 0) {
+      console.log(`No active connections for user ${userId}`);
+      return;
     }
-  });
-  console.log(`Sent ${messageType} to ${userConnections.length} connections for user ${userId}`);
+    userConnections.forEach((ws) => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(serverMessage));
+      }
+    });
+    console.log(`Sent ${messageType} to ${userConnections.length} connections for user ${userId}`);
 
   } catch (err) {
     console.error("Error handling order update:", err);
@@ -189,6 +206,7 @@ async function gracefulShutdown() {
   console.log("Graceful shutdown complete");
   process.exit(0);
 }
+
 
 // Register shutdown handlers for SIGTERM (kill) and SIGINT (Ctrl+C)
 process.on("SIGTERM", gracefulShutdown);

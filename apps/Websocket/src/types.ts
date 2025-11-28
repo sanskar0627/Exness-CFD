@@ -3,6 +3,10 @@ import type { Asset } from "shared";
 // Re-export Asset for convenience
 export type { Asset };
 
+export interface JWTPayload {
+  userId: string;
+}
+
 //Messages clients send to the server
 export type ClientMessage =
   | { type: "SUBSCRIBE"; symbol: Asset }
