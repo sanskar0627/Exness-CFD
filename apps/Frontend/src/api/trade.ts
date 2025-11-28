@@ -1,10 +1,25 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+
 import axios from "axios";
 import { convertoUsdPrice, toDisplayPrice } from "../utils/utils";
 import type { SYMBOL } from "../utils/constants";
 import type { Asset } from "../types/asset";
 
 const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api/v2";
+
+// Calculate time range based on chart duration
+function getTimeRangeForDuration(duration: any): number {
+  switch (duration) {
+    case "1m":
+      return 24 * 3600;        // 24 hours
+    case "1d":
+      return 30 * 24 * 3600;   // 30 days
+    case "1w":
+      return 180 * 24 * 3600;  // 180 days (6 months)
+    default:
+      return 3600;             // Default 1 hour
+  }
+}
+
 export async function getKlineData(
   asset: any,
   duration: any,
@@ -13,7 +28,7 @@ export async function getKlineData(
 ) {
   const currentTimeSec = Math.floor(Date.now() / 1000);
 
-  const startTimestamp = startTime ? Number(startTime) : currentTimeSec - 3600;
+  const startTimestamp = startTime ? Number(startTime) : currentTimeSec - getTimeRangeForDuration(duration);
   const endTimestamp = endTime ? Number(endTime) : currentTimeSec;
 
   const res = await axios.get(`${BASE_URL}/asset/candles`, {

@@ -9,6 +9,7 @@ import OrdersPanel from "../components/OrdersPanel";
 import BuySell from "../components/BuySell";
 import { toDisplayPrice } from "../utils/utils";
 import { fetchPlatformProfit, type PlatformProfitResponse } from "../api/profit";
+import toast, { Toaster } from "react-hot-toast";
 
 export default function Trading() {
   const [duration, setDuration] = useState<Duration>(Duration.candles_1m);
@@ -54,8 +55,170 @@ export default function Trading() {
     return () => clearInterval(interval);
   }, []);
 
+  // WebSocket connection for order notifications
+  useEffect(() => {
+    const WS_URL = import.meta.env.VITE_WS_URL || "ws://localhost:8080";
+    const token = localStorage.getItem("token");
+
+    if (!token) {
+      console.warn("No token found, skipping WebSocket connection");
+      return;
+    }
+
+    // Create WebSocket connection
+    const websocket = new WebSocket(WS_URL);
+
+    websocket.onopen = () => {
+      console.log("WebSocket connected for order notifications");
+
+      // Send authentication message
+      websocket.send(JSON.stringify({
+        type: "AUTH",
+        token: token
+      }));
+    };
+
+    websocket.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data);
+
+        switch (message.type) {
+          case "AUTHENTICATED":
+            toast.success("Connected to order updates", {
+              duration: 2000,
+            });
+            break;
+
+          case "UNAUTHENTICATED":
+            toast.error(`Authentication failed: ${message.message}`, {
+              duration: 4000,
+            });
+            break;
+
+          case "ORDER_OPENED":
+            const openedOrder = message.data;
+            toast.success(
+              `Order Opened: ${openedOrder.type.toUpperCase()} ${openedOrder.asset} at $${openedOrder.openPrice.toFixed(2)}`,
+              {
+                duration: 5000,
+              }
+            );
+            // Refresh balance after order opened
+            findUserAmount().catch(console.error);
+            break;
+
+          case "ORDER_CLOSED":
+            const closedOrder = message.data;
+            const pnl = closedOrder.pnl || 0;
+            const pnlColor = pnl >= 0 ? "text-green-400" : "text-red-400";
+
+            toast.custom(
+              (t) => (
+                <div className={`${t.visible ? 'animate-enter' : 'animate-leave'} max-w-md w-full bg-neutral-800 shadow-lg rounded-lg pointer-events-auto flex ring-1 ring-black ring-opacity-5`}>
+                  <div className="flex-1 w-0 p-4">
+                    <div className="flex items-start">
+                      <div className="ml-3 flex-1">
+                        <p className="text-sm font-medium text-neutral-100">
+                          Order Closed
+                        </p>
+                        <p className="mt-1 text-sm text-neutral-400">
+                          {closedOrder.asset} {closedOrder.type.toUpperCase()} closed at ${closedOrder.closePrice?.toFixed(2)}
+                        </p>
+                        <p className={`mt-1 text-sm font-bold ${pnlColor}`}>
+                          PnL: {pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex border-l border-neutral-700">
+                    <button
+                      onClick={() => toast.dismiss(t.id)}
+                      className="w-full border border-transparent rounded-none rounded-r-lg p-4 flex items-center justify-center text-sm font-medium text-neutral-400 hover:text-neutral-200 focus:outline-none"
+                    >
+                      Close
+                    </button>
+                  </div>
+                </div>
+              ),
+              { duration: 6000 }
+            );
+
+            // Refresh balance after order closed
+            findUserAmount().catch(console.error);
+            break;
+
+          case "ORDER_LIQUIDATED":
+            const liquidatedOrder = message.data;
+            toast.error(
+              `Order Liquidated: ${liquidatedOrder.asset} ${liquidatedOrder.type.toUpperCase()} at $${liquidatedOrder.closePrice?.toFixed(2)}`,
+              {
+                duration: 6000,
+              }
+            );
+            // Refresh balance after liquidation
+            findUserAmount().catch(console.error);
+            break;
+
+          case "PRICE_UPDATE":
+            // Ignore price updates (handled by Signalingmanager)
+            break;
+
+          default:
+            console.log("Unknown WebSocket message:", message);
+        }
+      } catch (error) {
+        console.error("Error parsing WebSocket message:", error);
+      }
+    };
+
+    websocket.onerror = (error) => {
+      console.error("WebSocket error:", error);
+      toast.error("Connection error. Retrying...", {
+        duration: 3000,
+      });
+    };
+
+    websocket.onclose = () => {
+      console.log("WebSocket disconnected");
+      toast("Disconnected from order updates", {
+        duration: 3000,
+      });
+    };
+
+    // Cleanup on unmount
+    return () => {
+      if (websocket.readyState === WebSocket.OPEN) {
+        websocket.close();
+      }
+    };
+  }, []);
+
   return (
     <div className="min-h-screen bg-neutral-950 overflow-hidden flex flex-col font-mono">
+      {/* Toast Notifications */}
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          style: {
+            background: '#1c1c1c',
+            color: '#fff',
+            border: '1px solid #404040',
+          },
+          success: {
+            iconTheme: {
+              primary: '#10b981',
+              secondary: '#fff',
+            },
+          },
+          error: {
+            iconTheme: {
+              primary: '#ef4444',
+              secondary: '#fff',
+            },
+          },
+        }}
+      />
+
       {/* Background Effects */}
       <div className="fixed inset-0 bg-neutral-950">
         <div className="absolute top-0 left-1/4 w-96 h-96 bg-gradient-to-br from-neutral-500/10 via-neutral-600/5 to-transparent blur-3xl"></div>
