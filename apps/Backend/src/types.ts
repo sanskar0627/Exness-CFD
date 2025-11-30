@@ -132,3 +132,9 @@ export interface Candle {
   volume: string;
 }
 export type ValidSymbol = "BTC" | "ETH" | "SOL";
+
+//CloseDecsion Interface 
+export interface CloseDecsion{
+  reason:reasonForClose,
+  price:number
+}

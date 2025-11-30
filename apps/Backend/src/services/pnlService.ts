@@ -52,6 +52,11 @@ export function calculateCurrentPnL(
   }
 }
 
+// /// here we are not optimizing it but we can optimize it futher also like we are using simple looping but  we can use batch optimization in it eg:-  Group all BTC orders together
+//   - Get BTC price once
+//   - Calculate PnL for all BTC orders
+//   - Repeat for ETH, SOL
+//   - More efficient but more complex
 export async function calculateAllPnL(): Promise<Map<string, PnLData>> {
   try {
     // Get all open orders from all users
