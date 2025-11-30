@@ -1,5 +1,5 @@
 import { createClient } from "redis";
-import type { redisPriceData ,IncomingredisPriceData } from "../types";
+import type { redisPriceData, IncomingredisPriceData } from "../types";
 import { PriceDataSchema } from "../types";
 import { SUPPORTED_ASSETS, Asset } from "shared";
 const client = createClient({
@@ -54,5 +54,51 @@ export async function handelPriceUpdate(assert: Asset, message: string) {
     console.log("Sucessfully Handels the Price Update!!");
   } catch (err) {
     console.error("Error In Updating the Price", err);
+  }
+}
+
+export async function getCurrentPrice(assert: Asset) {
+  const currentPrice = PriceStorageMp.get(assert);
+  if (!currentPrice) {
+    console.log(" NO  Data for this Assert");
+    return null;
+  }
+  const time = Math.floor(Date.now() / 1000);;
+  const time_Diff = time - currentPrice.time;
+  if (time_Diff >= 10) {
+    console.log("The price of the Asset is old it not a new price");
+    return null;
+  }
+  const returnPrice: IncomingredisPriceData = {
+    bidPrice: currentPrice.bid, // Sell price in PRICE_SCALE
+    askPrice: currentPrice.ask, // Buy price in PRICE_SCALE
+    time: currentPrice.time,
+  };
+  return returnPrice;
+}
+
+export async function stopPriceMonitor() {
+  try {
+    //  Unsubscribe from all channels
+    for (const asset of SUPPORTED_ASSETS) {
+      await client.unsubscribe(asset);
+    }
+    console.log("Unsubscribed from all price channels");
+
+    
+    if (client.isOpen) {
+      await client.quit();
+      console.log("Redis connection closed successfully");
+    }
+
+    
+    PriceStorageMp.clear();
+    console.log("Price storage cleared");
+  } catch (err) {
+    console.error("Error stopping price monitor:", err);
+    // Force disconnect if quit fails
+    if (client.isOpen) {
+      await client.disconnect();
+    }
   }
 }
