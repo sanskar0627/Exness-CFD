@@ -35,12 +35,21 @@ export const signinSchema = z.object({
   email: z.string().email("Invalid email format"),
   password: z.string().min(6, "Password must be at least 6 characters"),
 });
+export const PriceDataSchema = z.object({
+  bidPrice: z.number(), // Sell price in PRICE_SCALE
+  askPrice: z.number(), // Buy price in PRICE_SCALE
+  time: z.number(),
+});
 
 // Trading Types
-export type TimeDurationCandel="1m"|"1d"|"1w";
+export type TimeDurationCandel = "1m" | "1d" | "1w";
 export type OrderType = "buy" | "sell";
 export type OrderStatus = "OPEN" | "CLOSED" | "LIQUIDATED";
-export type reasonForClose ="manual"| "take_profit"| "stop_loss"| "liquidation";
+export type reasonForClose =
+  | "manual"
+  | "take_profit"
+  | "stop_loss"
+  | "liquidation";
 export interface Order {
   orderId: string; // UUID
   userId: string; // UUID
@@ -62,7 +71,17 @@ export interface ClosedOrder extends Order {
   pnl: number; // Profit/Loss in cents (can be negative)
   closeReason: "manual" | "take_profit" | "stop_loss" | "liquidation";
 }
-
+export interface redisPriceData {
+  bid: number; // Sell price in PRICE_SCALE
+  ask: number; // Buy price in PRICE_SCALE
+  decimals: number;
+  time: number;
+}
+export interface IncomingredisPriceData {
+  bidPrice: number; // Sell price in PRICE_SCALE
+  askPrice: number; // Buy price in PRICE_SCALE
+  time: number;
+}
 export interface PriceData {
   bid: number; // Sell price in PRICE_SCALE
   ask: number; // Buy price in PRICE_SCALE
@@ -105,11 +124,17 @@ export const closeTradeSchema = z.object({
 });
 
 export interface Candle {
-    time: number;
-    open: number;
-    high: number;
-    low: number;
-    close: number;
-    volume: string;
+  time: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: string;
 }
 export type ValidSymbol = "BTC" | "ETH" | "SOL";
+
+//CloseDecsion Interface 
+export interface CloseDecsion{
+  reason:reasonForClose,
+  price:number
+}
