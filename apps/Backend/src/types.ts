@@ -138,3 +138,5 @@ export interface CloseDecsion{
   reason:reasonForClose,
   price:number
 }
+
+export const SnapShot_Interval=1000; //10 second's

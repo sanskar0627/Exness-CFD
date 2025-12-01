@@ -7,6 +7,8 @@ import { assetRouter } from "./routes/asset";
 import { initOrderBroadcast, stopOrderBroadcast } from "./services/orderBroadcast";
 import { initPriceMonitor, stopPriceMonitor } from "./services/priceMonitor";
 import { startPositionMonitor, stopPositionMonitor } from "./services/positionMonitor";
+import { startSnapshotService, stopSnapshotService } from "./services/snapshotService";
+import { restoreState } from "./services/stateRestoration";
 
 const app: Express = express();
 const port = Number(process.env.PORT) || 5000;
@@ -38,10 +40,16 @@ app.use((req: Request, res: Response) => {
 // Main async function to initialize services and start server
 async function main() {
   try {
+    // FIRST: Restore state from database (critical for crash recovery)
+    await restoreState();
+
+    // THEN: Initialize other services
     await initPriceMonitor();
     startPositionMonitor();
-    // Initialize order broadcast service (Redis connection)
     await initOrderBroadcast();
+
+    // Start snapshot service (saves state every 10 seconds)
+    startSnapshotService();
 
     // Start Express server
     app.listen(port, () => {
@@ -61,10 +69,11 @@ async function main() {
 async function shutdown() {
   console.log("\n[SERVER] Shutting down gracefully...");
   try {
+    stopSnapshotService();
     stopPositionMonitor();
     await stopPriceMonitor();
     await stopOrderBroadcast();
-    console.log("[SERVER] Order broadcast service stopped");
+    console.log("[SERVER] All services stopped successfully");
   } catch (error) {
     console.error("[SERVER] Error during shutdown:", error);
   }
