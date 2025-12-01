@@ -5,6 +5,7 @@ import { CreateUser, findUser, findUSerId, UserBalance } from "../data/store";
 import { generateToken } from "../utils/jwt";
 import { hashPassword, comparePassword } from "../utils/password";
 import { authMiddleware } from "../middleware/auth";
+import { authRateLimit, apiRateLimit } from "../middleware/rateLimit";
 import type { SignupRequest, SigninRequest } from "../types";
 import { signupSchema, signinSchema } from "../types";
 import { fromInternalUSD } from "shared";
@@ -15,6 +16,7 @@ export const userRouter = Router(); // To organise ROutes
 
 userRouter.post(
   "/signup",
+  authRateLimit,
   async (req: Request, res: Response): Promise<void> => {
     try {
       const { email, password } = req.body as SignupRequest;
@@ -65,7 +67,7 @@ userRouter.post(
 );
 
 //SIGN IN ROutes
-userRouter.post("/signin",async (req: Request, res: Response): Promise<void> => {
+userRouter.post("/signin", authRateLimit, async (req: Request, res: Response): Promise<void> => {
   try {
     const { email, password } = req.body as SigninRequest;
     const validate = signinSchema.safeParse({ email, password });
@@ -86,6 +88,16 @@ userRouter.post("/signin",async (req: Request, res: Response): Promise<void> => 
       res.status(401).json({ error: "Invalid credentials" });
       return;
     }
+
+    // Check if user is an OAuth user (has provider but empty/no password)
+    if (user.provider && (!user.password || user.password === "")) {
+      console.log(`[SIGNIN] OAuth user attempting password login: ${email}`);
+      res.status(401).json({ 
+        error: `This account uses ${user.provider} login. Please sign in with ${user.provider}.` 
+      });
+      return;
+    }
+
     //check the password is same or not using bcrypt
     const isPasswordValid = comparePassword(password, user.password);
     if (!isPasswordValid) {
@@ -113,6 +125,7 @@ userRouter.post("/signin",async (req: Request, res: Response): Promise<void> => 
 
 userRouter.get(
   "/balance",
+  apiRateLimit,
   authMiddleware,
   (req: Request, res: Response): void => {
     try {

@@ -14,7 +14,7 @@ export async function restoreState() {
       StoreData.set(user.userId, {
         userId: user.userId,
         email: user.email,
-        password: user.password,
+        password: user.password || "", // Handle OAuth users with empty password
         balance: { usd_balance: user.balanceCents },
         assets: {} as Record<Asset, number>,
       });

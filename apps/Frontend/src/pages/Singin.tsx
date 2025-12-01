@@ -1,14 +1,29 @@
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { submitsignin } from "../api/trade";
 import { useEffect, useState } from "react";
+import OAuthButtons from "../components/OAuthButtons";
 
 export default function Signin() {
   const [error, setError] = useState("");
   const [submitted, setIsSubmitted] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   useEffect(() => {
+    // Check for OAuth error in URL params
+    const oauthError = searchParams.get("error");
+    if (oauthError) {
+      const errorMessages: Record<string, string> = {
+        no_code: "Authentication was cancelled",
+        token_failed: "Failed to verify your account",
+        no_email: "Could not retrieve email from provider",
+        oauth_failed: "Authentication failed. Please try again.",
+        no_token: "Authentication failed. Please try again.",
+      };
+      setError(errorMessages[oauthError] || "Authentication failed");
+    }
+
     document.documentElement.style.scrollBehavior = "smooth";
     document.body.style.overflow = "hidden";
 
@@ -16,7 +31,7 @@ export default function Signin() {
       document.body.style.overflow = "auto";
       document.documentElement.style.scrollBehavior = "auto";
     };
-  }, [navigate]);
+  }, [navigate, searchParams]);
 
   const handlesubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     setIsSubmitted(true);
@@ -144,6 +159,10 @@ export default function Signin() {
                   )}
                 </button>
               </form>
+
+              {/* OAuth Buttons */}
+              <OAuthButtons disabled={submitted} />
+
               <div className="text-center">
                 <p className="text-neutral-400 text-sm">
                   Don't have an account?{" "}

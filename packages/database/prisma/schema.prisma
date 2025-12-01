@@ -25,13 +25,20 @@ model Trade {
 
 // User accounts with authentication and balances
 model User {
-  userId       String   @id
-  email        String   @unique
-  password     String
-  balanceCents Int      @default(500000)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  userId        String   @id
+  email         String   @unique
+  password      String   // Empty string for OAuth users
+  balanceCents  Int      @default(500000)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
+  // OAuth fields
+  provider      String?  // "google", "github", or null for email/password
+  providerId    String?  // OAuth provider's user ID
+  emailVerified Boolean  @default(false)
+  avatarUrl     String?  // Profile picture from OAuth
+
+  @@index([provider, providerId])
   @@map("users")
 }
 

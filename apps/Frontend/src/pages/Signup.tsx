@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router";
 import { submitsignup } from "../api/trade";
 import { useEffect, useState } from "react";
+import OAuthButtons from "../components/OAuthButtons";
 
 export default function Signup() {
   const [error, setError] = useState("");
@@ -137,6 +138,9 @@ export default function Signup() {
                   {isLoading ? "Creating Account..." : "Create Account"}
                 </button>
               </form>
+
+              {/* OAuth Buttons */}
+              <OAuthButtons disabled={submitted} />
 
               <div className="text-center">
                 <p className="text-neutral-400 text-sm">

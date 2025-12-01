@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { Request, Response } from "express";
 import { authMiddleware } from "../middleware/auth";
+import { tradeOpenRateLimit, tradeCloseRateLimit, apiRateLimit } from "../middleware/rateLimit";
 import { openTradeSchema } from "../types";
 import { findUSerId } from "../data/store";
 import { toInternalUSD, fromInternalUSD, fromInternalPrice } from "shared";
@@ -19,6 +20,7 @@ export const tradeRoutes = Router();
 
 tradeRoutes.post(
   "/open",
+  tradeOpenRateLimit,
   authMiddleware,
   async (req: Request, res: Response): Promise<void> => {
     //checking that from body every response is thier or not
@@ -101,6 +103,7 @@ tradeRoutes.post(
 //close End point
 tradeRoutes.post(
   "/close",
+  tradeCloseRateLimit,
   authMiddleware,
   async (req: Request, res: Response): Promise<void> => {
     const { OrderId } = req.body;
@@ -150,6 +153,7 @@ tradeRoutes.post(
 //Route to check open Position
 tradeRoutes.get(
   "/open",
+  apiRateLimit,
   authMiddleware,
   (req: Request, res: Response): void => {
     const userId = req.userId;
@@ -181,6 +185,7 @@ tradeRoutes.get(
 //get the all the trades for trade history
 tradeRoutes.get(
   "/history",
+  apiRateLimit,
   authMiddleware,
   (req: Request, res: Response): void => {
     const userId = req.userId;
