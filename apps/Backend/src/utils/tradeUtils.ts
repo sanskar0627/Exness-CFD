@@ -2,6 +2,7 @@ import {getUserOrders,getUserCloseOrders, findUSerId,UserBalance,} from "../data
 import { reasonForClose, ClosedOrder } from "../types";
 import { calculatePnLCents } from "./PnL";
 import { broadcastOrderClose } from "../services/orderBroadcast";
+import { prisma } from "database";
 
 
 export  async function closeOrder(userId: string,orderId: string,closePrice: number,closeReason: reasonForClose): Promise<number> {
@@ -19,6 +20,26 @@ export  async function closeOrder(userId: string,orderId: string,closePrice: num
     order.leverage,
     order.type
   );
+   await prisma.closedOrder.create({
+    data: {
+      orderId: order.orderId,
+      userId: order.userId,
+      asset: order.asset,
+      type: order.type,
+      margin: order.margin,
+      leverage: order.leverage,
+      openPrice: order.openPrice,
+      closePrice: closePrice,
+      liquidationPrice: order.liquidationPrice,
+      takeProfit: order.takeProfit,
+      stopLoss: order.stopLoss,
+      pnl: pnl,
+      closeReason: closeReason.toUpperCase(),
+      closeMessage: null,
+      openedAt: new Date(order.openTimestamp),
+      closedAt: new Date()
+    }
+  });
 
   const closedOrder: ClosedOrder = {
     ...order,
