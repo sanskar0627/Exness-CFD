@@ -49,6 +49,8 @@ model ClosedOrder {
   asset            String
   type             String
   margin           Int
+  initialMargin    Int      // Original margin when opened
+  addedMargin      Int      @default(0) // Additional margin added
   leverage         Int
   openPrice        Int
   closePrice       Int
@@ -61,6 +63,12 @@ model ClosedOrder {
   openedAt         DateTime
   closedAt         DateTime
   createdAt        DateTime @default(now())
+
+  // Trailing stop loss fields (JSON stored as String for simplicity)
+  trailingStopLossEnabled       Boolean @default(false)
+  trailingStopLossDistance      Int?
+  trailingStopLossHighestPrice  Int?
+  trailingStopLossLowestPrice   Int?
 
   @@index([userId])
   @@index([closedAt])
@@ -86,6 +94,8 @@ model OrderSnapshot {
   asset            String
   type             String
   margin           Int
+  initialMargin    Int      // Original margin when opened
+  addedMargin      Int      @default(0) // Additional margin added
   leverage         Int
   openPrice        Int
   liquidationPrice Int
@@ -93,6 +103,12 @@ model OrderSnapshot {
   stopLoss         Int?
   openedAt         DateTime
   snapshotAt       DateTime @default(now())
+
+  // Trailing stop loss fields
+  trailingStopLossEnabled       Boolean @default(false)
+  trailingStopLossDistance      Int?
+  trailingStopLossHighestPrice  Int?
+  trailingStopLossLowestPrice   Int?
 
   @@index([userId, snapshotAt])
   @@index([orderId, snapshotAt])

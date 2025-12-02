@@ -1,6 +1,6 @@
 import rateLimit from "express-rate-limit";
 
-
+// IP-based rate limiters (default behavior, no custom keyGenerator needed)
 export const authRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 5, // 5 requests per window
@@ -9,7 +9,6 @@ export const authRateLimit = rateLimit({
   },
   standardHeaders: true, // Return rate limit info in `RateLimit-*` headers
   legacyHeaders: false, // Disable `X-RateLimit-*` headers
-  // Skip successful requests (only count failed attempts)
   skipSuccessfulRequests: false,
   skipFailedRequests: false,
 });
@@ -24,7 +23,17 @@ export const oauthRateLimit = rateLimit({
   legacyHeaders: false,
 });
 
+export const globalRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 500, // 500 requests per window
+  message: {
+    error: "Too many requests from this IP. Please try again later.",
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
+// User-based rate limiters (use userId when available, fall back to IP)
 export const tradeOpenRateLimit = rateLimit({
   windowMs: 60 * 1000, // 1 minute
   max: 30, // 30 trades per minute
@@ -34,11 +43,16 @@ export const tradeOpenRateLimit = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   // Use userId from auth middleware for per-user limiting
+  // If userId exists, use it; otherwise express-rate-limit will use IP automatically
   keyGenerator: (req) => {
-    return req.userId || req.ip || "unknown";
+    // Only use custom key if userId exists, otherwise let library handle IP
+    return req.userId || undefined;
+  },
+  skip: (req) => {
+    // Don't skip any requests
+    return false;
   },
 });
-
 
 export const tradeCloseRateLimit = rateLimit({
   windowMs: 60 * 1000, // 1 minute
@@ -49,10 +63,9 @@ export const tradeCloseRateLimit = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => {
-    return req.userId || req.ip || "unknown";
+    return req.userId || undefined;
   },
 });
-
 
 export const apiRateLimit = rateLimit({
   windowMs: 60 * 1000, // 1 minute
@@ -63,10 +76,9 @@ export const apiRateLimit = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => {
-    return req.userId || req.ip || "unknown";
+    return req.userId || undefined;
   },
 });
-
 
 export const chartDataRateLimit = rateLimit({
   windowMs: 60 * 1000, // 1 minute
@@ -77,17 +89,6 @@ export const chartDataRateLimit = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => {
-    return req.userId || req.ip || "unknown";
+    return req.userId || undefined;
   },
-});
-
-
-export const globalRateLimit = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 500, // 500 requests per window
-  message: {
-    error: "Too many requests from this IP. Please try again later.",
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
 });

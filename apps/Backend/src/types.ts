@@ -55,14 +55,21 @@ export interface Order {
   userId: string; // UUID
   asset: Asset; // BTC, ETH, or SOL
   type: OrderType; // buy or sell
-  margin: number; // Collateral in cents (e.g., $1000.00 = 100000)
-  leverage: Leverage; // 1, 5, 10, 20, or 100
+  margin: number; // Current collateral in cents (can increase with addMargin)
+  initialMargin: number; // Original margin when position was opened
+  addedMargin: number; // Additional margin added (default: 0)
+  leverage: Leverage; // Original leverage (1, 5, 10, 20, or 100)
   openPrice: number; // Entry price in PRICE_SCALE (e.g., $60,000.50 = 600005000)
-  openTimestamp: number; // Unix timestamp in milliseco
-  // nds
+  openTimestamp: number; // Unix timestamp in milliseconds
   liquidationPrice: number; // Liquidation price in PRICE_SCALE
   takeProfit?: number; // Optional take-profit price in PRICE_SCALE
   stopLoss?: number; // Optional stop-loss price in PRICE_SCALE
+  trailingStopLoss?: {
+    enabled: boolean; // Is trailing stop loss active
+    trailingDistance: number; // Distance from peak/trough in PRICE_SCALE
+    highestPrice?: number; // Highest price reached (for BUY orders)
+    lowestPrice?: number; // Lowest price reached (for SELL orders)
+  };
 }
 
 export interface ClosedOrder extends Order {
@@ -94,10 +101,24 @@ export interface OpenTradeRequest {
   leverage: Leverage;
   takeProfit?: number; // Optional take-profit price in USD
   stopLoss?: number; // Optional stop-loss price in USD
+  trailingStopLoss?: {
+    enabled: boolean;
+    trailingDistance: number; // Distance in USD (will be converted to PRICE_SCALE)
+  };
 }
 
 export interface CloseTradeRequest {
   orderId: string;
+}
+
+export interface PartialCloseRequest {
+  orderId: string;
+  percentage: number; // Percentage to close (1-99)
+}
+
+export interface AddMarginRequest {
+  orderId: string;
+  additionalMargin: number; // USD amount to add (will be converted to cents)
 }
 
 // Zod validation schemas for trading requests
@@ -117,10 +138,30 @@ export const openTradeSchema = z.object({
     .min(10, "Minimum margin is $10"),
   takeProfit: z.number().optional(),
   stopLoss: z.number().optional(),
+  trailingStopLoss: z.object({
+    enabled: z.boolean(),
+    trailingDistance: z.number().positive("Trailing distance must be positive"),
+  }).optional(),
 });
 
 export const closeTradeSchema = z.object({
   orderId: z.string().min(1, "Order ID is required"),
+});
+
+export const partialCloseSchema = z.object({
+  orderId: z.string().min(1, "Order ID is required"),
+  percentage: z
+    .number()
+    .min(1, "Minimum percentage is 1%")
+    .max(99, "Maximum percentage is 99%"),
+});
+
+export const addMarginSchema = z.object({
+  orderId: z.string().min(1, "Order ID is required"),
+  additionalMargin: z
+    .number()
+    .positive("Additional margin must be positive")
+    .min(10, "Minimum additional margin is $10"),
 });
 
 export interface Candle {

@@ -81,6 +81,41 @@ export function shouldClosePosition(
     return null;
 }
 
+// Update trailing stop loss if enabled
+function updateTrailingStopLoss(order: Order, currentPrice: number): void {
+    if (!order.trailingStopLoss?.enabled) {
+        return; // No trailing stop loss enabled
+    }
+
+    const tsl = order.trailingStopLoss;
+
+    if (order.type === "buy") {
+        // For BUY orders: Track highest price and move stop loss up
+        if (!tsl.highestPrice || currentPrice > tsl.highestPrice) {
+            tsl.highestPrice = currentPrice;
+            const newStopLoss = currentPrice - tsl.trailingDistance;
+
+            // Only update if new stop loss is higher (never lower)
+            if (!order.stopLoss || newStopLoss > order.stopLoss) {
+                order.stopLoss = newStopLoss;
+                console.log(`[TSL] BUY order ${order.orderId}: Updated SL to ${newStopLoss} (highest: ${currentPrice})`);
+            }
+        }
+    } else {
+        // For SELL orders: Track lowest price and move stop loss down
+        if (!tsl.lowestPrice || currentPrice < tsl.lowestPrice) {
+            tsl.lowestPrice = currentPrice;
+            const newStopLoss = currentPrice + tsl.trailingDistance;
+
+            // Only update if new stop loss is lower (never higher)
+            if (!order.stopLoss || newStopLoss < order.stopLoss) {
+                order.stopLoss = newStopLoss;
+                console.log(`[TSL] SELL order ${order.orderId}: Updated SL to ${newStopLoss} (lowest: ${currentPrice})`);
+            }
+        }
+    }
+}
+
 export async function checkCycle():Promise<void>{
     try{
         console.log(`starting the monitoring cycle ${Date.now()}`);
@@ -88,6 +123,7 @@ export async function checkCycle():Promise<void>{
         let postionChecked=0;
         let postionClsoed=0;
         let counterror=0;
+        let trailingUpdates=0;
         let price:number =0;
         //lopp through each order
         for (const[orderId,order] of alluser.entries()){
@@ -102,6 +138,11 @@ export async function checkCycle():Promise<void>{
             }else if(order.type==="sell"){
                  price=UserAsset.askPrice;
             }
+
+            // Update trailing stop loss BEFORE checking if position should close
+            updateTrailingStopLoss(order, price);
+            trailingUpdates++;
+
             //calling to check that the function  to check close Descison
             const closePosition= shouldClosePosition(order,price);
             if(closePosition=== null){
@@ -118,18 +159,18 @@ export async function checkCycle():Promise<void>{
             }
 
         }
-        
+
         // Log cycle stats
-        console.log(`[CheckCycle] Completed: ${postionChecked} checked, ${postionClsoed} closed, ${counterror} errors`);
+        console.log(`[CheckCycle] Completed: ${postionChecked} checked, ${trailingUpdates} TSL updates, ${postionClsoed} closed, ${counterror} errors`);
         lastCheckTime = Date.now();
-        
+
         // Schedule next cycle
         if (isRunning) {
             timeoutId = setTimeout(checkCycle, CHECK_INTERVAL);
         }
     }catch(err){
         console.error("[CheckCycle} error coming while cheking It",err);
-        
+
         // Schedule next cycle even after error
         if (isRunning) {
             timeoutId = setTimeout(checkCycle, CHECK_INTERVAL);
