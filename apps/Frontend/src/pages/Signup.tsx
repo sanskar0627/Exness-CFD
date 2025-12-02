@@ -1,4 +1,4 @@
-import { useNavigate } from "react-router";
+import { useNavigate } from "react-router-dom";
 import { submitsignup } from "../api/trade";
 import { useEffect, useState } from "react";
 import OAuthButtons from "../components/OAuthButtons";

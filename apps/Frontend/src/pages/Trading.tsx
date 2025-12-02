@@ -4,7 +4,7 @@ import { Channels, Duration } from "../utils/constants";
 import type { SYMBOL } from "../utils/constants";
 import AskBids from "../components/AskBidsTable";
 import { findUserAmount } from "../api/trade";
-import { useNavigate } from "react-router";
+import { useNavigate } from "react-router-dom";
 import OrdersPanel from "../components/OrdersPanel";
 import BuySell from "../components/BuySell";
 import { toDisplayPrice } from "../utils/utils";

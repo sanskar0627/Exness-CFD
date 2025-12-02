@@ -133,7 +133,6 @@ export class SubscriptionManager {
     }
     const clientSub = this.assetSubscribers.get(asset);
     if (!clientSub) {
-      console.log("No Client has subscribed it");
       return;
     }
     const strServerMessage = JSON.stringify(message);
