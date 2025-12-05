@@ -16,24 +16,65 @@ export default function BuySell({
   askPrice,
   bidPrice,
   symbol,
+  onOrderPlaced,
 }: {
   askPrice: number;
   bidPrice: number;
   symbol: SYMBOL;
+  onOrderPlaced?: () => void;
 }) {
   const [orderType, setOrderType] = useState<"market" | "pending">("market");
-  const [margin, setMargin] = useState<number>(100);
+  const [margin, setMargin] = useState<number | string>(100);
   const [leverage, setLeverage] = useState<number>(1);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [tpEnabled, setTpEnabled] = useState<boolean>(false);
   const [slEnabled, setSlEnabled] = useState<boolean>(false);
   const [tpPrice, setTpPrice] = useState<string>("");
   const [slPrice, setSlPrice] = useState<string>("");
+  const [tpPercentage, setTpPercentage] = useState<number>(5); // Default 5% profit
+  const [slPercentage, setSlPercentage] = useState<number>(5); // Default 5% loss
+  const [tpManualEdit, setTpManualEdit] = useState<boolean>(false); // Track manual editing
+  const [slManualEdit, setSlManualEdit] = useState<boolean>(false); // Track manual editing
+  const [tslEnabled, setTslEnabled] = useState<boolean>(false); // Trailing Stop Loss
+  const [tslDistance, setTslDistance] = useState<string>("500"); // Default $500 trailing distance
   const [activeTab, setActiveTab] = useState<"buy" | "sell">("buy");
   const [error, setError] = useState<string>("");
   const [success, setSuccess] = useState<string>("");
   const [userBalance, setUserBalance] = useState<number>(0);
   const [currentAsset, setCurrentAsset] = useState<Asset | null>(null);
+
+  // Reset manual edit flags when switching tabs
+  useEffect(() => {
+    setTpManualEdit(false);
+    setSlManualEdit(false);
+  }, [activeTab]);
+
+  // Auto-calculate TP/SL when enabled or percentage changes (but NOT when manually editing)
+  useEffect(() => {
+    const currentPrice = activeTab === "buy" ? askPrice : bidPrice;
+
+    // Only auto-calculate if NOT in manual edit mode
+    if (tpEnabled && currentPrice > 0 && !tpManualEdit) {
+      // For BUY: TP is ABOVE entry (profit when price goes UP)
+      // For SELL: TP is BELOW entry (profit when price goes DOWN)
+      const tpCalculated =
+        activeTab === "buy"
+          ? currentPrice * (1 + tpPercentage / 100)
+          : currentPrice * (1 - tpPercentage / 100);
+      setTpPrice(tpCalculated.toFixed(2));
+    }
+
+    // Only auto-calculate if NOT in manual edit mode
+    if (slEnabled && currentPrice > 0 && !slManualEdit) {
+      // For BUY: SL is BELOW entry (loss when price goes DOWN)
+      // For SELL: SL is ABOVE entry (loss when price goes UP)
+      const slCalculated =
+        activeTab === "buy"
+          ? currentPrice * (1 - slPercentage / 100)
+          : currentPrice * (1 + slPercentage / 100);
+      setSlPrice(slCalculated.toFixed(2));
+    }
+  }, [tpEnabled, slEnabled, tpPercentage, slPercentage, activeTab, askPrice, bidPrice, tpManualEdit, slManualEdit]);
 
   useEffect(() => {
     const getUserBalance = async () => {
@@ -82,7 +123,7 @@ export default function BuySell({
         ? toInternalPrice(askPrice)
         : toInternalPrice(bidPrice);
     const closePriceForCalc = toInternalPrice(Number(tpPrice));
-    const marginForCalc = margin * 100; // Convert dollar margin to cents
+    const marginForCalc = Number(margin) * 100; // Convert dollar margin to cents
 
     // 2. Call the exact same robust function used everywhere else
     return calculatePnlCents({
@@ -103,7 +144,7 @@ export default function BuySell({
         ? toInternalPrice(askPrice)
         : toInternalPrice(bidPrice);
     const closePriceForCalc = toInternalPrice(Number(slPrice));
-    const marginForCalc = margin * 100; // Convert dollar margin to cents
+    const marginForCalc = Number(margin) * 100; // Convert dollar margin to cents
 
     // 2. Call the robust P&L function
     return calculatePnlCents({
@@ -116,16 +157,67 @@ export default function BuySell({
   }, [slEnabled, slPrice, activeTab, askPrice, bidPrice, margin, leverage]);
 
   const handleSubmitTrade = async () => {
-    if (margin <= 0) {
+    const marginValue = Number(margin);
+    if (marginValue <= 0) {
       setError("Margin must be greater than 0");
       setTimeout(() => setError(""), 3000);
       return;
     }
 
-    if (margin > userBalance) {
-      setError("Insufficient balance");
-      setTimeout(() => setError(""), 3000);
+    // CRITICAL FIX: Check balance INCLUDING 0.5% fee (matches backend calculation)
+    const openFee = marginValue * 0.005; // 0.5% fee on margin entry
+    const totalCost = marginValue + openFee;
+
+    if (totalCost > userBalance) {
+      setError(`Insufficient balance. Need $${totalCost.toFixed(2)} (margin: $${marginValue.toFixed(2)} + 0.5% fee: $${openFee.toFixed(2)})`);
+      setTimeout(() => setError(""), 4000);
       return;
+    }
+
+    // CRITICAL FIX: Client-side TP/SL validation for immediate feedback
+    const entryPrice = activeTab === "buy" ? askPrice : bidPrice;
+
+    if (tpEnabled && tpPrice) {
+      const takeProfitValue = Number(tpPrice);
+      if (activeTab === "buy" && takeProfitValue <= entryPrice) {
+        setError(`Invalid Take Profit. For BUY orders, TP must be higher than entry price ($${entryPrice.toFixed(2)})`);
+        setTimeout(() => setError(""), 4000);
+        return;
+      }
+      if (activeTab === "sell" && takeProfitValue >= entryPrice) {
+        setError(`Invalid Take Profit. For SELL orders, TP must be lower than entry price ($${entryPrice.toFixed(2)})`);
+        setTimeout(() => setError(""), 4000);
+        return;
+      }
+    }
+
+    if (slEnabled && slPrice) {
+      const stopLossValue = Number(slPrice);
+      if (activeTab === "buy" && stopLossValue >= entryPrice) {
+        setError(`Invalid Stop Loss. For BUY orders, SL must be lower than entry price ($${entryPrice.toFixed(2)})`);
+        setTimeout(() => setError(""), 4000);
+        return;
+      }
+      if (activeTab === "sell" && stopLossValue <= entryPrice) {
+        setError(`Invalid Stop Loss. For SELL orders, SL must be higher than entry price ($${entryPrice.toFixed(2)})`);
+        setTimeout(() => setError(""), 4000);
+        return;
+      }
+    }
+
+    // CRITICAL FIX: Validate Trailing Stop Loss minimum distance
+    if (tslEnabled && tslDistance) {
+      const tslDistanceValue = Number(tslDistance);
+      if (tslDistanceValue < 10) {
+        setError(`Invalid Trailing Stop Loss. Minimum distance is $10 to prevent instant closure (you entered $${tslDistance})`);
+        setTimeout(() => setError(""), 4000);
+        return;
+      }
+      if (tslDistanceValue > 10000) {
+        setError(`Invalid Trailing Stop Loss. Maximum distance is $10,000 (you entered $${tslDistance})`);
+        setTimeout(() => setError(""), 4000);
+        return;
+      }
     }
 
     try {
@@ -137,21 +229,31 @@ export default function BuySell({
       const response = await createTrade({
         symbol,
         activeTab,
-        margin,
+        margin: marginValue,
         leverage,
         tpEnabled,
         tpPrice,
         slEnabled,
         slPrice,
+        tslEnabled,
+        tslDistance,
         token,
       });
-      if (response.data && response.data.orderId) {
+      
+      console.log("Response from backend:", response);
+      
+      if (response && response.order && response.order.orderId) {
         setSuccess(`Order placed successfully!`);
         setTimeout(() => setSuccess(""), 3000);
 
         const balanceResponse = await findUserAmount();
         if (balanceResponse && balanceResponse.balance && balanceResponse.balance.usd) {
           setUserBalance(balanceResponse.balance.usd);
+        }
+        
+        // Trigger immediate refresh of orders
+        if (onOrderPlaced) {
+          onOrderPlaced();
         }
       }
     } catch (err) {
@@ -381,7 +483,7 @@ export default function BuySell({
               type="button"
               aria-label="Decrease margin"
               className="rounded-md border border-[#263136] px-2 py-1 text-xs text-white/80 hover:bg-[#1c2a31] transition-colors"
-              onClick={() => setMargin((prev) => Math.max(10, prev - 10))}
+              onClick={() => setMargin((prev) => Math.max(10, Number(prev) - 10))}
               disabled={isSubmitting}
             >
               −
@@ -397,7 +499,14 @@ export default function BuySell({
                 min={10}
                 step={10}
                 value={margin}
-                onChange={(e) => setMargin(Number(e.target.value))}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === "") {
+                    setMargin("");
+                  } else {
+                    setMargin(Number(val));
+                  }
+                }}
                 disabled={isSubmitting}
                 className="w-full rounded-md border border-[#263136] bg-[#141D22] pl-6 pr-2 py-1.5 text-xs outline-none focus:border-[#158BF9] transition-colors"
               />
@@ -406,7 +515,7 @@ export default function BuySell({
               type="button"
               aria-label="Increase margin"
               className="rounded-md border border-[#263136] px-2 py-1 text-xs text-white/80 hover:bg-[#1c2a31] transition-colors"
-              onClick={() => setMargin((prev) => prev + 10)}
+              onClick={() => setMargin((prev) => Number(prev) + 10)}
               disabled={isSubmitting}
             >
               +
@@ -417,7 +526,7 @@ export default function BuySell({
             <div
               className="h-full bg-gradient-to-r from-[#158BF9]/30 to-[#158BF9]/80"
               style={{
-                width: `${Math.min(100, (margin / userBalance) * 100)}%`,
+                width: `${Math.min(100, (Number(margin) / userBalance) * 100)}%`,
               }}
             ></div>
           </div>
@@ -448,31 +557,71 @@ export default function BuySell({
                 <span className="text-white/70 font-medium">{leverage}x</span>
               </div>
               <div className="text-[10px] text-green-400 bg-green-500/10 px-1.5 py-0.5 rounded">
-                ${(margin * leverage).toLocaleString("en-US")}
+                ${(Number(margin) * leverage).toLocaleString("en-US")}
               </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-5 gap-1.5">
-            {[1, 2, 5, 10, 20].map((lev) => (
+          <div className="grid grid-cols-6 gap-1.5">
+            {[1, 2, 5, 10, 20, 100].map((lev) => (
               <button
                 key={lev}
                 type="button"
                 className={`rounded-md border relative overflow-hidden ${
                   leverage === lev
-                    ? "border-[#158BF9] bg-[#158BF9]/10 text-[#158BF9]"
+                    ? lev >= 100
+                      ? "border-red-500 bg-red-500/10 text-red-400"
+                      : lev >= 20
+                      ? "border-orange-500 bg-orange-500/10 text-orange-400"
+                      : "border-[#158BF9] bg-[#158BF9]/10 text-[#158BF9]"
                     : "border-[#263136] text-white/70 hover:bg-[#1c2a31]"
                 } px-1 py-1.5 text-xs transition-all`}
                 onClick={() => setLeverage(lev)}
                 disabled={isSubmitting}
               >
                 {leverage === lev && (
-                  <div className="absolute top-0 left-0 w-1 h-full bg-[#158BF9]"></div>
+                  <div className={`absolute top-0 left-0 w-1 h-full ${
+                    lev >= 100 ? "bg-red-500" : lev >= 20 ? "bg-orange-500" : "bg-[#158BF9]"
+                  }`}></div>
                 )}
                 {lev}x
               </button>
             ))}
           </div>
+
+          {/* CRITICAL: High leverage warnings */}
+          {leverage >= 100 && (
+            <div className="mt-2 rounded-md border border-red-500/30 bg-red-500/5 p-2">
+              <div className="flex items-start gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-red-400 flex-shrink-0 mt-0.5">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                  <line x1="12" y1="9" x2="12" y2="13"></line>
+                  <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                </svg>
+                <div className="space-y-1">
+                  <div className="text-[11px] font-semibold text-red-400">EXTREME RISK - 100x Leverage</div>
+                  <div className="text-[10px] text-red-300/80">
+                    A 1% price move against you = 100% loss (instant liquidation). Only use if you understand the extreme risk.
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {leverage >= 20 && leverage < 100 && (
+            <div className="mt-2 rounded-md border border-orange-500/30 bg-orange-500/5 p-2">
+              <div className="flex items-start gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-orange-400 flex-shrink-0 mt-0.5">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <line x1="12" y1="8" x2="12" y2="12"></line>
+                  <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                </svg>
+                <div className="text-[10px] text-orange-300/80">
+                  High leverage ({leverage}x) = High risk. A {(100 / leverage).toFixed(1)}% move against you will liquidate your position.
+                </div>
+              </div>
+            </div>
+          )}
         </section>
 
         <div className="mt-3 space-y-2">
@@ -514,28 +663,56 @@ export default function BuySell({
               </div>
             </div>
 
-            <div className="relative">
-              <div className="absolute left-0 top-0 h-full px-2 flex items-center">
-                <span className="text-xs text-white/50">$</span>
+            <div className="space-y-2">
+              <div className="relative">
+                <div className="absolute left-0 top-0 h-full px-2 flex items-center">
+                  <span className="text-xs text-white/50">$</span>
+                </div>
+                <input
+                  id="tp-price"
+                  name="tp"
+                  type="number"
+                  step="0.01"
+                  placeholder="Target Price"
+                  disabled={!tpEnabled}
+                  value={tpPrice}
+                  onChange={(e) => {
+                    setTpPrice(e.target.value);
+                    setTpManualEdit(true); // User is manually editing
+                  }}
+                  className={`
+                    w-full rounded-md border border-[#263136] bg-[#141D22] pl-6 pr-2 py-1.5 text-xs outline-none
+                    ${
+                      tpEnabled
+                        ? "focus:border-[#158BF9] transition-colors"
+                        : "opacity-50"
+                    }
+                  `}
+                />
               </div>
-              <input
-                id="tp-price"
-                name="tp"
-                type="number"
-                step="0.01"
-                placeholder="Target Price"
-                disabled={!tpEnabled}
-                value={tpPrice}
-                onChange={(e) => setTpPrice(e.target.value)}
-                className={`
-                  w-full rounded-md border border-[#263136] bg-[#141D22] pl-6 pr-2 py-1.5 text-xs outline-none 
-                  ${
-                    tpEnabled
-                      ? "focus:border-[#158BF9] transition-colors"
-                      : "opacity-50"
-                  }
-                `}
-              />
+
+              {tpEnabled && (
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px] text-white/50">Quick:</span>
+                  {[2, 5, 10, 15].map((percent) => (
+                    <button
+                      key={percent}
+                      type="button"
+                      onClick={() => {
+                        setTpPercentage(percent);
+                        setTpManualEdit(false); // Re-enable auto-calculation
+                      }}
+                      className={`flex-1 text-[10px] px-2 py-1 rounded border transition-colors ${
+                        tpPercentage === percent && !tpManualEdit
+                          ? "border-green-500 bg-green-500/20 text-green-400"
+                          : "border-[#263136] bg-[#141D22] text-white/60 hover:border-green-500/50"
+                      }`}
+                    >
+                      +{percent}%
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             {tpEnabled && (
@@ -606,28 +783,56 @@ export default function BuySell({
               </div>
             </div>
 
-            <div className="relative">
-              <div className="absolute left-0 top-0 h-full px-2 flex items-center">
-                <span className="text-xs text-white/50">$</span>
+            <div className="space-y-2">
+              <div className="relative">
+                <div className="absolute left-0 top-0 h-full px-2 flex items-center">
+                  <span className="text-xs text-white/50">$</span>
+                </div>
+                <input
+                  id="sl-price"
+                  name="sl"
+                  type="number"
+                  step="0.01"
+                  placeholder="Stop Price"
+                  disabled={!slEnabled}
+                  value={slPrice}
+                  onChange={(e) => {
+                    setSlPrice(e.target.value);
+                    setSlManualEdit(true); // User is manually editing
+                  }}
+                  className={`
+                    w-full rounded-md border border-[#263136] bg-[#141D22] pl-6 pr-2 py-1.5 text-xs outline-none
+                    ${
+                      slEnabled
+                        ? "focus:border-[#EB483F] transition-colors"
+                        : "opacity-50"
+                    }
+                  `}
+                />
               </div>
-              <input
-                id="sl-price"
-                name="sl"
-                type="number"
-                step="0.01"
-                placeholder="Stop Price"
-                disabled={!slEnabled}
-                value={slPrice}
-                onChange={(e) => setSlPrice(e.target.value)}
-                className={`
-                  w-full rounded-md border border-[#263136] bg-[#141D22] pl-6 pr-2 py-1.5 text-xs outline-none 
-                  ${
-                    slEnabled
-                      ? "focus:border-[#EB483F] transition-colors"
-                      : "opacity-50"
-                  }
-                `}
-              />
+
+              {slEnabled && (
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px] text-white/50">Quick:</span>
+                  {[2, 5, 10, 15].map((percent) => (
+                    <button
+                      key={percent}
+                      type="button"
+                      onClick={() => {
+                        setSlPercentage(percent);
+                        setSlManualEdit(false); // Re-enable auto-calculation
+                      }}
+                      className={`flex-1 text-[10px] px-2 py-1 rounded border transition-colors ${
+                        slPercentage === percent && !slManualEdit
+                          ? "border-red-500 bg-red-500/20 text-red-400"
+                          : "border-[#263136] bg-[#141D22] text-white/60 hover:border-red-500/50"
+                      }`}
+                    >
+                      -{percent}%
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             {slEnabled && (
@@ -657,6 +862,88 @@ export default function BuySell({
               </div>
             )}
           </div>
+
+          <div className="bg-[#0f171b] border border-[#263136] rounded-md p-2">
+            <div className="flex items-center justify-between mb-1.5">
+              <div className="flex items-center gap-1">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="text-white/60"
+                >
+                  <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                </svg>
+                <label htmlFor="tsl-toggle" className="text-xs text-white/60">
+                  Trailing Stop Loss
+                </label>
+                <span className="bg-yellow-500/10 text-yellow-400 text-[10px] px-1.5 py-0.5 rounded">
+                  Advanced
+                </span>
+              </div>
+              <div className="flex items-center">
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    id="tsl-toggle"
+                    type="checkbox"
+                    className="sr-only peer"
+                    checked={tslEnabled}
+                    onChange={(e) => setTslEnabled(e.target.checked)}
+                  />
+                  <div className="w-9 h-5 bg-[#1c2a31] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white/30 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-yellow-500/30"></div>
+                </label>
+              </div>
+            </div>
+
+            <div className="relative">
+              <div className="absolute left-0 top-0 h-full px-2 flex items-center">
+                <span className="text-xs text-white/50">$</span>
+              </div>
+              <input
+                id="tsl-distance"
+                name="tsl"
+                type="number"
+                step="10"
+                placeholder="Trailing Distance (e.g. 500)"
+                disabled={!tslEnabled}
+                value={tslDistance}
+                onChange={(e) => setTslDistance(e.target.value)}
+                className={`
+                  w-full rounded-md border border-[#263136] bg-[#141D22] pl-6 pr-2 py-1.5 text-xs outline-none
+                  ${
+                    tslEnabled
+                      ? "focus:border-yellow-500 transition-colors"
+                      : "opacity-50"
+                  }
+                `}
+              />
+            </div>
+
+            {tslEnabled && (
+              <div className="mt-1.5 space-y-1">
+                <div className="text-[10px] text-white/40">
+                  Locks in profit as price moves in your favor. Stop loss moves with price but never reverses.
+                </div>
+                <div className="text-[10px] text-yellow-500/60">
+                  Minimum: $10 | Recommended: $50-$500
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="text-[10px] text-white/50">
+                    Distance from peak:
+                  </div>
+                  <div className="text-[10px] text-yellow-400 bg-yellow-500/10 px-1.5 py-0.5 rounded">
+                    ${tslDistance}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         {error && (
@@ -670,6 +957,25 @@ export default function BuySell({
             {success}
           </div>
         )}
+
+        {/* CRITICAL: Display 0.5% fee before submission */}
+        <div className="mt-3 rounded-md border border-neutral-600/40 bg-neutral-800/40 p-2">
+          <div className="space-y-1">
+            <div className="flex items-center justify-between text-[10px]">
+              <span className="text-white/50">Margin:</span>
+              <span className="text-white/80">${Number(margin).toFixed(2)}</span>
+            </div>
+            <div className="flex items-center justify-between text-[10px]">
+              <span className="text-white/50">Fee (0.5%):</span>
+              <span className="text-orange-400">${(Number(margin) * 0.005).toFixed(2)}</span>
+            </div>
+            <div className="h-px bg-neutral-600/30 my-1"></div>
+            <div className="flex items-center justify-between text-[11px] font-semibold">
+              <span className="text-white/70">Total Cost:</span>
+              <span className="text-white">${(Number(margin) + Number(margin) * 0.005).toFixed(2)}</span>
+            </div>
+          </div>
+        </div>
 
         <button
           className={`mt-3 w-full rounded-md px-3 py-3 text-xs font-semibold transition-all flex items-center justify-center gap-2 relative overflow-hidden ${

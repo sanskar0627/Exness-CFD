@@ -37,7 +37,7 @@ services:
     container_name: exness_zookeeper
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
-      ZOOKEEPER_TICK_TIME: 2000
+      ZOOKEEPER_TICK_TIME: 3000
     ports:
       - "2181:2181"
     volumes:
@@ -67,6 +67,9 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_HEAP_OPTS: "-Xmx256M -Xms256M"
+      KAFKA_OPTS: "-Djava.net.preferIPv4Stack=true"
+      KAFKA_ZOOKEEPER_SESSION_TIMEOUT_MS: 30000
     volumes:
       - kafka_data:/var/lib/kafka/data
     healthcheck:

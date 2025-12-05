@@ -16,7 +16,11 @@ const kafka = new Kafka({
   },
 });
 
-const consumer = kafka.consumer({ groupId: "exness_consumer_group" }); //connect kakfka consumer
+const consumer = kafka.consumer({ 
+  groupId: "exness_consumer_group",
+  sessionTimeout: 60000, // Increased to 60s
+  heartbeatInterval: 3000, // Explicitly set to 3s
+}); //connect kakfka consumer
 
 async function flushBatch() {
   if (batch.length === 0) return; //no trades in batch then do nothing.
@@ -64,7 +68,7 @@ export async function consumer_gr() {
           batch.push(data);
 
           // Check if batch size reached
-          if (batch.length >= 1000) {
+          if (batch.length >= 500) {
             console.log(` Batch size reached (${batch.length}), flushing...`);
             await flushBatch();
 

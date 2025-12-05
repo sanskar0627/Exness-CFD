@@ -32,12 +32,18 @@ async function saveSnapshot() {
           asset: order.asset,
           type: order.type,
           margin: order.margin,
+          initialMargin: order.initialMargin,
+          addedMargin: order.addedMargin || 0,
           leverage: order.leverage,
           openPrice: order.openPrice,
           liquidationPrice: order.liquidationPrice,
           takeProfit: order.takeProfit || null,
           stopLoss: order.stopLoss || null,
           openedAt: new Date(order.openTimestamp),
+          trailingStopLossEnabled: order.trailingStopLoss?.enabled || false,
+          trailingStopLossDistance: order.trailingStopLoss?.trailingDistance || null,
+          trailingStopLossHighestPrice: order.trailingStopLoss?.highestPrice || null,
+          trailingStopLossLowestPrice: order.trailingStopLoss?.lowestPrice || null,
         });
       });
     });

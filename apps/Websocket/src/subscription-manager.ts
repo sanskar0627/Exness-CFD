@@ -147,8 +147,6 @@ export class SubscriptionManager {
         console.error(`Failed to send to client ${clientId}:`, err);
       }
     }
-    console.log(
-      `Broadcast to ${clientSub.size} clients subscribed to ${asset}`,
-    );
+
   }
 }

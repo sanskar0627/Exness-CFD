@@ -4,6 +4,6 @@ import tailwindcss from "@tailwindcss/vite";
 
 // https://vite.dev/config/
 export default defineConfig({
-  base: "/", // ✅ important: root deployment
+  base: "/", // important: root deployment
   plugins: [react(), tailwindcss()],
 });

@@ -15,8 +15,8 @@ export default function PersonalDashboard() {
     };
 
     loadPlatformProfit();
-    // Refresh every 30 seconds
-    const interval = setInterval(loadPlatformProfit, 30000);
+    // Poll every 3 seconds for near real-time updates (backend uses cached value - super fast!)
+    const interval = setInterval(loadPlatformProfit, 3000);
     return () => clearInterval(interval);
   }, []);
 
@@ -200,7 +200,7 @@ export default function PersonalDashboard() {
           </div>
           <div>
             <div className="text-4xl font-bold text-green-500 mb-2">
-              {platformProfit ? `$${platformProfit.totalProfit.toFixed(2)}` : "$0.00"}
+              {platformProfit ? `$${(platformProfit.totalProfit / 100).toFixed(2)}` : "$0.00"}
             </div>
             <div className="text-neutral-400">Platform Profit</div>
             <div className="text-xs text-neutral-500 mt-1">

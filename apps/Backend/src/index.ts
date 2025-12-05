@@ -10,6 +10,7 @@ import { initPriceMonitor, stopPriceMonitor } from "./services/priceMonitor";
 import { startPositionMonitor, stopPositionMonitor } from "./services/positionMonitor";
 import { startSnapshotService, stopSnapshotService } from "./services/snapshotService";
 import { restoreState } from "./services/stateRestoration";
+import { initPlatformProfit } from "./services/platformProfit";
 import { logOAuthStatus } from "./config/oauth";
 
 const app: Express = express();
@@ -19,12 +20,26 @@ const allowedOrigins = Bun.env.CORS_ORIGINS?.split(",") || [
   "http://localhost:3000",
   "http://localhost:5173",
   "http://localhost:5174",
+  "http://localhost:5175",
+  "http://localhost:5176",
+  "http://localhost:5177",
+  "http://localhost:5178",
+  "http://localhost:5179",
 ];
 
-// Apply CORS middleware
+// Apply CORS middleware with explicit origin function
 app.use(
   cors({
-    origin: allowedOrigins,
+    origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps, curl, postman)
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error(`Origin ${origin} not allowed by CORS`));
+      }
+    },
     credentials: true,
   }),
 );
@@ -50,6 +65,9 @@ async function main() {
 
     //  Restore state from database (critical for crash recovery)
     await restoreState();
+
+    //  Initialize platform profit cache (AFTER restoreState so open orders are loaded)
+    await initPlatformProfit();
 
     //  Initialize other services
     await initPriceMonitor();

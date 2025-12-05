@@ -5,6 +5,7 @@
       "name": "Exness Cfd",
       "dependencies": {
         "@prisma/client": "6.17.1",
+        "axios": "^1.13.2",
         "jsonwebtoken": "^9.0.2",
         "redis": "^5.9.0",
         "ws": "^8.18.3",

@@ -61,7 +61,7 @@ userRouter.post(
       console.log(`[SIGNUP] User created successfully: ${email}`);
     } catch (err) {
       console.error("[SIGNUP] Error", err);
-      res.status(500).json({ error: "INternal server Error in Signup" });
+      res.status(500).json({ error: "Internal server error in signup" });
     }
   }
 );
@@ -108,7 +108,7 @@ userRouter.post("/signin", authRateLimit, async (req: Request, res: Response): P
     const token = generateToken(user.userId);
     const inMemory = findUSerId(user.userId);
     if (!inMemory) {
-    CreateUser(user.userId, user.email, user.password);
+    CreateUser(user.userId, user.email, user.password, user.balanceCents);
     console.log(`[SIGNIN] User ${user.userId} loaded into memory from database`);
   }
     res.status(200).json({
@@ -119,7 +119,7 @@ userRouter.post("/signin", authRateLimit, async (req: Request, res: Response): P
     console.log(`[SIGNIN] Login successful: ${email}`);
   } catch (err) {
     console.error("[SIGNIN] Error", err);
-    res.status(500).json({ error: "Internal server error in Signin" });
+    res.status(500).json({ error: "Internal server error in signin" });
   }
 });
 
@@ -155,7 +155,7 @@ userRouter.get(
       console.log(`[BALANCE] Balance retrieved for ${userId}: $${balanceusd}`);
     } catch (err) {
       console.error("[BALANCE] Error", err);
-      res.status(500).json({ error: "internal serveral error" });
+      res.status(500).json({ error: "Internal server error" });
     }
   }
 );

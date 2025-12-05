@@ -39,7 +39,10 @@ export default function ChartComponent({
   const [tooltipVisible, setTooltipVisible] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [followMode, setFollowMode] = useState<boolean>(true);
   const tooltipTimeoutRef = useRef<number | null>(null);
+  const userScrolledRef = useRef<boolean>(false);
+  const lastCandleTimeRef = useRef<number>(0);
 
   useEffect(() => {
     // Symbol changed - component will re-render with new chart
@@ -98,6 +101,11 @@ export default function ChartComponent({
           timeScale: {
             timeVisible: true,
             secondsVisible: false,
+            // Increase bar spacing for bigger candles
+            barSpacing: 12,  // Default is 6, higher = wider candles
+            minBarSpacing: 8,  // Minimum spacing when zoomed out
+            // Prevent excessive zoom out
+            rightOffset: 12,  // Space on right side for latest candle
           },
           localization: {
             timeFormatter: (timestamp: any) => {
@@ -129,6 +137,12 @@ export default function ChartComponent({
             return;
           }
 
+          // Check for valid price data
+          if (!trade.bidPrice || !trade.askPrice || isNaN(trade.bidPrice) || isNaN(trade.askPrice)) {
+            console.warn(`[CHART] Invalid price data for ${symbol}:`, trade);
+            return;
+          }
+
           // Only update prices AFTER confirming correct symbol
           const prices = {
             bidPrice: trade.bidPrice || 0,
@@ -149,6 +163,22 @@ export default function ChartComponent({
 
           if (candle && candlestickSeries) {
             candlestickSeries.update(candle);
+            
+            // Auto-scroll to latest candle if Follow Mode is enabled
+            if (followMode && !userScrolledRef.current && chart) {
+              // Only scroll if this is a new candle (time changed)
+              if (candle.time !== lastCandleTimeRef.current) {
+                lastCandleTimeRef.current = candle.time as number;
+                // Scroll to show the latest candle with some padding
+                setTimeout(() => {
+                  if (chart) {
+                    chart.timeScale().scrollToRealTime();
+                  }
+                }, 50);
+              }
+            }
+          } else {
+            console.warn(`[CHART] Failed to update candle - candle:`, candle, 'series:', !!candlestickSeries);
           }
         };
 
@@ -158,10 +188,60 @@ export default function ChartComponent({
         if (isCleanedUp) return;
 
         if (candlestickSeries) {
+          // CRITICAL FIX: Clear old symbol data first to prevent flash
+          candlestickSeries.setData([]);
+          // Then set new symbol data
           candlestickSeries.setData(rawData);
         }
         if (chart) {
-          chart.timeScale().fitContent();
+          // Set intelligent initial zoom based on duration
+          // Instead of fitContent() which shows ALL data (making candles tiny),
+          // we show a reasonable number of recent candles for better visibility
+          const dataLength = rawData.length;
+          if (dataLength > 0) {
+            // Determine how many candles to show based on chart duration
+            let visibleCandles;
+            switch (duration) {
+              case Duration.candles_1m:
+                visibleCandles = 60;  // Show last 1 hour (60 minutes)
+                break;
+              case Duration.candles_1d:
+                visibleCandles = 30;  // Show last 30 days
+                break;
+              case Duration.candles_1w:
+                visibleCandles = 20;  // Show last 20 weeks (~5 months)
+                break;
+              default:
+                visibleCandles = 60;
+            }
+
+            // Set visible range to show only the most recent candles
+            const from = Math.max(0, dataLength - visibleCandles);
+            const to = dataLength - 1;
+            
+            chart.timeScale().setVisibleLogicalRange({
+              from: from,
+              to: to,
+            });
+            
+            console.log(`[CHART] Initial zoom: showing ${visibleCandles} most recent candles (${from} to ${to} of ${dataLength})`);
+          } else {
+            // Fallback if no data
+            chart.timeScale().fitContent();
+          }
+          
+          // Track user scrolling to disable auto-scroll temporarily
+          chart.timeScale().subscribeVisibleLogicalRangeChange(() => {
+            if (!followMode) return;
+            
+            // Mark that user has scrolled
+            userScrolledRef.current = true;
+            
+            // Reset after 3 seconds of no scrolling
+            setTimeout(() => {
+              userScrolledRef.current = false;
+            }, 3000);
+          });
         }
 
         const signalingManager = Signalingmanager.getInstance();
@@ -239,6 +319,52 @@ export default function ChartComponent({
               {duration === Duration.candles_1d && "Daily Chart"}
               {duration === Duration.candles_1w && "Weekly Chart"}
             </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                setFollowMode(!followMode);
+                setTooltip(followMode ? "Follow Mode: OFF" : "Follow Mode: ON");
+                if (!followMode && chartRef.current) {
+                  // When enabling follow mode, scroll to latest
+                  chartRef.current.timeScale().scrollToRealTime();
+                }
+              }}
+              className={`px-3 py-2 rounded-md text-xs font-medium transition-all ${
+                followMode
+                  ? "bg-green-500/20 text-green-400 border border-green-500/30"
+                  : "bg-neutral-700/50 text-neutral-400 border border-neutral-600"
+              }`}
+              title={followMode ? "Auto-scroll enabled" : "Auto-scroll disabled"}
+            >
+              <div className="flex items-center gap-1.5">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  {followMode ? (
+                    <>
+                      <polyline points="23 4 23 10 17 10"></polyline>
+                      <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                    </>
+                  ) : (
+                    <>
+                      <circle cx="12" cy="12" r="10"></circle>
+                      <line x1="12" y1="8" x2="12" y2="12"></line>
+                      <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                    </>
+                  )}
+                </svg>
+                <span>{followMode ? "Live" : "Paused"}</span>
+              </div>
+            </button>
           </div>
           <div className="flex items-center gap-3">
             <div className="flex items-center border border-neutral-600 rounded-md bg-neutral-800/60 backdrop-blur-sm">

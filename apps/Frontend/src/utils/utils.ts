@@ -48,10 +48,10 @@ export function calculatePnlCents({
   const PRICE_SCALE = 10000n;
   const CONVERSION_FACTOR = PRICE_SCALE / MONEY_SCALE;
 
-  const openP = BigInt(openPrice);
-  const closeP = BigInt(closePrice);
-  const margin = BigInt(marginCents);
-  const lev = BigInt(leverage);
+  const openP = BigInt(Math.round(openPrice));
+  const closeP = BigInt(Math.round(closePrice));
+  const margin = BigInt(Math.round(marginCents));
+  const lev = BigInt(Math.round(leverage));
 
   const marginOnPriceScale = margin * CONVERSION_FACTOR;
   const totalPositionValue = marginOnPriceScale * lev;

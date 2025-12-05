@@ -112,12 +112,23 @@ function handleClientMessage(ws: WebSocket, mssg: RawData) {
     }
     //  to verify user and send auth with user id
     else if (message.type === "AUTH") {
+      // Check if token exists
+      if (!message.token) {
+        console.log("Authentication failed: No token provided");
+        let response: ServerMessage = {
+          type: "UNAUTHENTICATED",
+          message: "No token provided",
+        };
+        ws.send(JSON.stringify(response));
+        return;
+      }
+      
       const verify=Verifytokenws(message.token);
       if(!verify || verify==null){
-        console.log("The veification is not done or its Null");
+        console.log("Authentication failed: Token verification returned null");
         let response: ServerMessage = {
         type: "UNAUTHENTICATED",
-        message: "Inavlid TOKEN",
+        message: "Invalid TOKEN",
       };
         ws.send(JSON.stringify(response));
         return;
@@ -125,6 +136,7 @@ function handleClientMessage(ws: WebSocket, mssg: RawData) {
       const userid=verify.userId;
 
       SubsManager.setUserId(ws,userid);
+      console.log(`User ${userid} authenticated successfully via WebSocket`);
       ws.send(JSON.stringify({ type: "AUTHENTICATED",userId:userid }));
     }
     ///for the  Error and wrong types this will throw error

@@ -27,12 +27,12 @@ export interface SigninRequest {
 
 // Zod validation schemas for request validation
 export const signupSchema = z.object({
-  email: z.string().email("Invalid email format"),
+  email: z.email("Invalid email format"),
   password: z.string().min(6, "Password must be at least 6 characters"),
 });
 
 export const signinSchema = z.object({
-  email: z.string().email("Invalid email format"),
+  email: z.email("Invalid email format"),
   password: z.string().min(6, "Password must be at least 6 characters"),
 });
 export const PriceDataSchema = z.object({
@@ -49,7 +49,8 @@ export type reasonForClose =
   | "manual"
   | "take_profit"
   | "stop_loss"
-  | "liquidation";
+  | "liquidation"
+  | "partial_close";
 export interface Order {
   orderId: string; // UUID
   userId: string; // UUID
@@ -76,7 +77,7 @@ export interface ClosedOrder extends Order {
   closePrice: number; // Exit price in PRICE_SCALE
   closeTimestamp: number; // Unix timestamp in milliseconds
   pnl: number; // Profit/Loss in cents (can be negative)
-  closeReason: "manual" | "take_profit" | "stop_loss" | "liquidation";
+  closeReason: reasonForClose;
 }
 export interface redisPriceData {
   bid: number; // Sell price in PRICE_SCALE
@@ -92,6 +93,7 @@ export interface IncomingredisPriceData {
 export interface PriceData {
   bid: number; // Sell price in PRICE_SCALE
   ask: number; // Buy price in PRICE_SCALE
+  time?: number;
 }
 
 export interface OpenTradeRequest {
@@ -140,7 +142,9 @@ export const openTradeSchema = z.object({
   stopLoss: z.number().optional(),
   trailingStopLoss: z.object({
     enabled: z.boolean(),
-    trailingDistance: z.number().positive("Trailing distance must be positive"),
+    trailingDistance: z.number()
+      .positive("Trailing distance must be positive")
+      .min(0.01, "Minimum trailing distance is $0.01"),
   }).optional(),
 });
 
@@ -179,5 +183,7 @@ export interface CloseDecsion{
   reason:reasonForClose,
   price:number
 }
+export const STALE_PRICE_THRESHOLD_MS = 30000; // 30 seconds
 
-export const SnapShot_Interval=1000; //10 second's
+export const SnapShot_Interval = 1000; // 1 second
+export const FEE_PERCENTAGE = 0.005; // 0.5% spread
