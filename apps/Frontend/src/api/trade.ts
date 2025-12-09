@@ -1,6 +1,5 @@
 
 import axios from "axios";
-import { convertoUsdPrice, toDisplayPrice } from "../utils/utils";
 import type { SYMBOL } from "../utils/constants";
 import type { Asset } from "../types/asset";
 
@@ -40,14 +39,16 @@ export async function getKlineData(
     },
   });
 
+  // IMPORTANT: Backend already converts prices with fromInternalPrice()
+  // DO NOT convert again here or prices will be divided by 10000 twice!
   if (res.data && Array.isArray(res.data.candles)) {
     res.data.candles = res.data.candles.map((candle: any) => ({
-      open: toDisplayPrice(candle.open),
-      high: toDisplayPrice(candle.high),
-      low: toDisplayPrice(candle.low),
-      close: toDisplayPrice(candle.close),
-      time: candle.timestamp,
-      decimal: candle.decimal,
+      open: candle.open,      // Already converted by backend
+      high: candle.high,      // Already converted by backend
+      low: candle.low,        // Already converted by backend
+      close: candle.close,    // Already converted by backend
+      time: candle.time,      // Backend returns 'time' not 'timestamp'
+      volume: candle.volume,  // Pass through volume
     }));
   }
   return res.data;
@@ -145,7 +146,7 @@ export async function closetrade(token: string, orderId: string) {
     const data = await axios.post(
       `${BASE_URL}/trade/close`,
       {
-        OrderId: orderId,
+        orderId: orderId,  // Fixed: lowercase to match backend
       },
       {
         headers: {
@@ -169,6 +170,8 @@ export async function createTrade({
   tpPrice,
   slEnabled,
   slPrice,
+  tslEnabled,
+  tslDistance,
   token,
 }: {
   symbol: SYMBOL;
@@ -179,6 +182,8 @@ export async function createTrade({
   tpPrice: string;
   slEnabled: boolean;
   slPrice: string;
+  tslEnabled: boolean;
+  tslDistance: string;
   token: string;
 }) {
   try {
@@ -188,7 +193,7 @@ export async function createTrade({
       leverage,
     };
 
-    payload["margin"] = convertoUsdPrice(margin);
+    payload["margin"] = margin;
 
     if (tpEnabled) {
       payload.takeProfit = Number(tpPrice);
@@ -196,13 +201,60 @@ export async function createTrade({
     if (slEnabled) {
       payload.stopLoss = Number(slPrice);
     }
-    console.log("Data sent ", payload);
+    if (tslEnabled) {
+      const trailingDistanceNum = Number(tslDistance);
+      // Safeguard: ensure it's a valid number, not NaN
+      if (isNaN(trailingDistanceNum) || trailingDistanceNum <= 0) {
+        throw new Error(`Invalid trailing distance: ${tslDistance}`);
+      }
+      payload.trailingStopLoss = {
+        enabled: true,
+        trailingDistance: trailingDistanceNum,
+      };
+    }
 
     const { data } = await axios.post(`${BASE_URL}/trade/open`, payload, {
       headers: { Authorization: `Bearer ${token}` },
       withCredentials: true,
     });
 
+    return data;
+  } catch (e) {
+    if (axios.isAxiosError(e) && e.response) {
+      throw new Error(JSON.stringify(e.response.data));
+    }
+    throw new Error((e as Error).message);
+  }
+}
+
+// Partial Close - Close a percentage of an open position
+export async function partialCloseTrade(orderId: string, percentage: number, token: string) {
+  try {
+    const { data } = await axios.post(
+      `${BASE_URL}/trade/partial-close`,
+      { orderId, percentage },
+      {
+        headers: { Authorization: `Bearer ${token}` },
+        withCredentials: true,
+      }
+    );
+    return data;
+  } catch (e) {
+    throw new Error((e as Error).message);
+  }
+}
+
+// Add Margin - Add more collateral to reduce liquidation risk
+export async function addMarginToTrade(orderId: string, additionalMargin: number, token: string) {
+  try {
+    const { data } = await axios.post(
+      `${BASE_URL}/trade/add-margin`,
+      { orderId, additionalMargin },
+      {
+        headers: { Authorization: `Bearer ${token}` },
+        withCredentials: true,
+      }
+    );
     return data;
   } catch (e) {
     throw new Error((e as Error).message);

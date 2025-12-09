@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api/v2";
 
 export interface PlatformProfitResponse {
   totalProfit: number; // In USD
@@ -13,7 +13,7 @@ export interface PlatformProfitResponse {
 export const fetchPlatformProfit = async (): Promise<PlatformProfitResponse> => {
   try {
     const response = await axios.get<PlatformProfitResponse>(
-      `${API_BASE_URL}/api/v2/trade/platform-profit`
+      `${API_BASE_URL}/trade/platform-profit`
     );
     return response.data;
   } catch (error) {

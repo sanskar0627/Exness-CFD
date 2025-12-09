@@ -25,13 +25,20 @@ model Trade {
 
 // User accounts with authentication and balances
 model User {
-  userId       String   @id
-  email        String   @unique
-  password     String
-  balanceCents Int      @default(500000)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  userId        String   @id
+  email         String   @unique
+  password      String   // Empty string for OAuth users
+  balanceCents  Int      @default(500000)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
+  // OAuth fields
+  provider      String?  // "google", "github", or null for email/password
+  providerId    String?  // OAuth provider's user ID
+  emailVerified Boolean  @default(false)
+  avatarUrl     String?  // Profile picture from OAuth
+
+  @@index([provider, providerId])
   @@map("users")
 }
 
@@ -42,6 +49,8 @@ model ClosedOrder {
   asset            String
   type             String
   margin           Int
+  initialMargin    Int      // Original margin when opened
+  addedMargin      Int      @default(0) // Additional margin added
   leverage         Int
   openPrice        Int
   closePrice       Int
@@ -54,6 +63,12 @@ model ClosedOrder {
   openedAt         DateTime
   closedAt         DateTime
   createdAt        DateTime @default(now())
+
+  // Trailing stop loss fields (JSON stored as String for simplicity)
+  trailingStopLossEnabled       Boolean @default(false)
+  trailingStopLossDistance      Int?
+  trailingStopLossHighestPrice  Int?
+  trailingStopLossLowestPrice   Int?
 
   @@index([userId])
   @@index([closedAt])
@@ -79,6 +94,8 @@ model OrderSnapshot {
   asset            String
   type             String
   margin           Int
+  initialMargin    Int      // Original margin when opened
+  addedMargin      Int      @default(0) // Additional margin added
   leverage         Int
   openPrice        Int
   liquidationPrice Int
@@ -87,7 +104,53 @@ model OrderSnapshot {
   openedAt         DateTime
   snapshotAt       DateTime @default(now())
 
-  @@index([userId, snapshotAt])
+  // Trailing stop loss fields
+  trailingStopLossEnabled       Boolean @default(false)
+  trailingStopLossDistance      Int?
+  trailingStopLossHighestPrice  Int?
+  trailingStopLossLowestPrice   Int?
+
   @@index([orderId, snapshotAt])
   @@map("order_snapshots")
+}
+
+// Currently active orders (persistent state)
+model ActiveOrder {
+  orderId          String   @id
+  userId           String
+  asset            String
+  type             String
+  margin           Int
+  initialMargin    Int      // Original margin when opened
+  addedMargin      Int      @default(0) // Additional margin added
+  leverage         Int
+  openPrice        Int
+  liquidationPrice Int
+  takeProfit       Int?
+  stopLoss         Int?
+  openedAt         DateTime
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  // Trailing stop loss fields
+  trailingStopLossEnabled       Boolean @default(false)
+  trailingStopLossDistance      Int?
+  trailingStopLossHighestPrice  Int?
+  trailingStopLossLowestPrice   Int?
+
+  @@index([userId])
+  @@map("active_orders")
+}
+
+// Platform profit state (singleton  always id = 1)
+model PlatformProfit {
+  id            Int      @id @default(1)
+  totalProfit   Int      // Total platform profit in cents
+  openTrades    Int      // Count of currently open trades
+  closedTrades  Int      // Count of closed trades
+  totalTrades   Int      // Total trades (open + closed)
+  lastUpdated   DateTime @updatedAt
+  createdAt     DateTime @default(now())
+
+  @@map("platform_profit")
 }

@@ -4,7 +4,7 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "dev": "bun --hot src/index.ts",
+    "dev": "bun ../../scripts/watch-quiet.ts src/index.ts",
     "build": "bun build src/index.ts --outdir dist --target bun",
     "start": "bun src/index.ts"
   },
@@ -13,6 +13,7 @@
     "cors": "^2.8.5",
     "database": "workspace:*",
     "express": "^5.1.0",
+    "express-rate-limit": "^8.2.1",
     "jsonwebtoken": "^9.0.2",
     "redis": "^5.9.0",
     "shared": "workspace:*",

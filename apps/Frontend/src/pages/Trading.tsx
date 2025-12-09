@@ -1,10 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import ChartComponent from "../components/Chart";
 import { Channels, Duration } from "../utils/constants";
 import type { SYMBOL } from "../utils/constants";
 import AskBids from "../components/AskBidsTable";
 import { findUserAmount } from "../api/trade";
-import { useNavigate } from "react-router";
+import { useNavigate } from "react-router-dom";
 import OrdersPanel from "../components/OrdersPanel";
 import BuySell from "../components/BuySell";
 import { toDisplayPrice } from "../utils/utils";
@@ -16,6 +16,7 @@ export default function Trading() {
   const [symbol, setSymbol] = useState<SYMBOL>(Channels.BTCUSDT);
   const [prices, setPrices] = useState({ askPrice: 0, bidPrice: 0 });
   const [platformProfit, setPlatformProfit] = useState<PlatformProfitResponse | null>(null);
+  const refreshOrdersRef = useRef<(() => void) | null>(null);
   const navigate = useNavigate();
   
   useEffect(() => {
@@ -51,7 +52,8 @@ export default function Trading() {
     };
 
     loadPlatformProfit();
-    const interval = setInterval(loadPlatformProfit, 30000);
+    // Poll every 3 seconds for near real-time updates (backend uses cached value - super fast!)
+    const interval = setInterval(loadPlatformProfit, 3000);
     return () => clearInterval(interval);
   }, []);
 
@@ -84,15 +86,17 @@ export default function Trading() {
 
         switch (message.type) {
           case "AUTHENTICATED":
-            toast.success("Connected to order updates", {
-              duration: 2000,
+            console.log("WebSocket authenticated successfully");
+            // Subtle notification that doesn't distract from sign-in flow
+            toast("Connected to live updates", {
+              duration: 1500,
+              icon: "🔔",
             });
             break;
 
           case "UNAUTHENTICATED":
-            toast.error(`Authentication failed: ${message.message}`, {
-              duration: 4000,
-            });
+            console.warn("WebSocket authentication failed:", message.message);
+            // Don't show toast to avoid confusing users during sign-in/sign-up
             break;
 
           case "ORDER_OPENED":
@@ -103,8 +107,11 @@ export default function Trading() {
                 duration: 5000,
               }
             );
-            // Refresh balance after order opened
+            // Refresh balance and orders immediately after order opened
             findUserAmount().catch(console.error);
+            if (refreshOrdersRef.current) {
+              refreshOrdersRef.current();
+            }
             break;
 
           case "ORDER_CLOSED":
@@ -180,9 +187,7 @@ export default function Trading() {
 
     websocket.onclose = () => {
       console.log("WebSocket disconnected");
-      toast("Disconnected from order updates", {
-        duration: 3000,
-      });
+      // Don't show toast to avoid confusion during page navigation
     };
 
     // Cleanup on unmount
@@ -291,7 +296,7 @@ export default function Trading() {
                 <div>
                   <div className="text-[9px] text-green-400/70 font-medium uppercase">Platform Profit</div>
                   <div className="text-sm font-bold text-green-400">
-                    {platformProfit ? `$${platformProfit.totalProfit.toFixed(2)}` : "$0.00"}
+                    {platformProfit ? `$${(platformProfit.totalProfit / 100).toFixed(2)}` : "$0.00"}
                   </div>
                 </div>
               </div>
@@ -332,6 +337,18 @@ export default function Trading() {
                 1w
               </button>
             </div>
+
+            
+            <button
+              onClick={() => {
+                localStorage.removeItem("token");
+                localStorage.removeItem("userID");
+                navigate("/signin");
+              }}
+              className="bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/30 px-4 py-2 rounded-md text-sm font-medium transition-colors ml-2"
+            >
+              Logout
+            </button>
           </div>
         </div>
 
@@ -357,7 +374,7 @@ export default function Trading() {
               </div>
 
               <div className="h-[35%]">
-                <OrdersPanel />
+                <OrdersPanel onRefreshReady={(fn) => { refreshOrdersRef.current = fn; }} />
               </div>
             </div>
 
@@ -366,6 +383,7 @@ export default function Trading() {
                 symbol={symbol}
                 askPrice={toDisplayPrice(prices.askPrice)}
                 bidPrice={toDisplayPrice(prices.bidPrice)}
+                onOrderPlaced={refreshOrdersRef.current || undefined}
               />
             </div>
           </div>

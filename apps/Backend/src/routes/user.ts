@@ -5,6 +5,7 @@ import { CreateUser, findUser, findUSerId, UserBalance } from "../data/store";
 import { generateToken } from "../utils/jwt";
 import { hashPassword, comparePassword } from "../utils/password";
 import { authMiddleware } from "../middleware/auth";
+import { authRateLimit, apiRateLimit } from "../middleware/rateLimit";
 import type { SignupRequest, SigninRequest } from "../types";
 import { signupSchema, signinSchema } from "../types";
 import { fromInternalUSD } from "shared";
@@ -15,6 +16,7 @@ export const userRouter = Router(); // To organise ROutes
 
 userRouter.post(
   "/signup",
+  authRateLimit,
   async (req: Request, res: Response): Promise<void> => {
     try {
       const { email, password } = req.body as SignupRequest;
@@ -59,13 +61,13 @@ userRouter.post(
       console.log(`[SIGNUP] User created successfully: ${email}`);
     } catch (err) {
       console.error("[SIGNUP] Error", err);
-      res.status(500).json({ error: "INternal server Error in Signup" });
+      res.status(500).json({ error: "Internal server error in signup" });
     }
   }
 );
 
 //SIGN IN ROutes
-userRouter.post("/signin",async (req: Request, res: Response): Promise<void> => {
+userRouter.post("/signin", authRateLimit, async (req: Request, res: Response): Promise<void> => {
   try {
     const { email, password } = req.body as SigninRequest;
     const validate = signinSchema.safeParse({ email, password });
@@ -86,6 +88,16 @@ userRouter.post("/signin",async (req: Request, res: Response): Promise<void> => 
       res.status(401).json({ error: "Invalid credentials" });
       return;
     }
+
+    // Check if user is an OAuth user (has provider but empty/no password)
+    if (user.provider && (!user.password || user.password === "")) {
+      console.log(`[SIGNIN] OAuth user attempting password login: ${email}`);
+      res.status(401).json({ 
+        error: `This account uses ${user.provider} login. Please sign in with ${user.provider}.` 
+      });
+      return;
+    }
+
     //check the password is same or not using bcrypt
     const isPasswordValid = comparePassword(password, user.password);
     if (!isPasswordValid) {
@@ -96,7 +108,7 @@ userRouter.post("/signin",async (req: Request, res: Response): Promise<void> => 
     const token = generateToken(user.userId);
     const inMemory = findUSerId(user.userId);
     if (!inMemory) {
-    CreateUser(user.userId, user.email, user.password);
+    CreateUser(user.userId, user.email, user.password, user.balanceCents);
     console.log(`[SIGNIN] User ${user.userId} loaded into memory from database`);
   }
     res.status(200).json({
@@ -107,12 +119,13 @@ userRouter.post("/signin",async (req: Request, res: Response): Promise<void> => 
     console.log(`[SIGNIN] Login successful: ${email}`);
   } catch (err) {
     console.error("[SIGNIN] Error", err);
-    res.status(500).json({ error: "Internal server error in Signin" });
+    res.status(500).json({ error: "Internal server error in signin" });
   }
 });
 
 userRouter.get(
   "/balance",
+  apiRateLimit,
   authMiddleware,
   (req: Request, res: Response): void => {
     try {
@@ -142,7 +155,7 @@ userRouter.get(
       console.log(`[BALANCE] Balance retrieved for ${userId}: $${balanceusd}`);
     } catch (err) {
       console.error("[BALANCE] Error", err);
-      res.status(500).json({ error: "internal serveral error" });
+      res.status(500).json({ error: "Internal server error" });
     }
   }
 );

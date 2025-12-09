@@ -7,6 +7,8 @@ export class Signalingmanager {
   private static instance: Signalingmanager;
   private bufferedMessage: Record<string, unknown>[] = [];
   private initialized: boolean = false;
+  private authenticated: boolean = false; // Track authentication status
+  private token: string | null = null; // Store JWT token for reconnection
   private callbacks: { [symbol: string]: Array<(...args: Trade[]) => void> } =
     {};
   private subCount: Record<string, number> = {};
@@ -14,6 +16,8 @@ export class Signalingmanager {
   private constructor() {
     this.ws = new WebSocket(url);
     this.bufferedMessage = [];
+    // Try to get token from localStorage on initialization
+    this.token = localStorage.getItem("token");
     this.init();
   }
 
@@ -68,12 +72,20 @@ export class Signalingmanager {
     this.ws.onopen = () => {
       this.initialized = true;
 
+      // CRITICAL FIX: Send AUTH message immediately after connection
+      if (this.token) {
+        this.ws.send(JSON.stringify({ type: "AUTH", token: this.token }));
+        console.log("WebSocket authentication sent");
+      }
+
+      // Re-subscribe to all active subscriptions
       Object.keys(this.subCount).forEach((sym) => {
         if (this.subCount[sym] > 0) {
           this.ws.send(JSON.stringify({ type: "SUBSCRIBE", symbol: sym }));
         }
       });
 
+      // Send any buffered messages
       this.bufferedMessage.forEach((msg) => {
         this.ws.send(JSON.stringify(msg));
       });
@@ -85,7 +97,18 @@ export class Signalingmanager {
     this.ws.onmessage = (msg) => {
       const raw = msg.data;
       const parsedMsg = JSON.parse(raw);
-      
+
+      // CRITICAL FIX: Handle authentication responses
+      if (parsedMsg.type === "AUTHENTICATED") {
+        this.authenticated = true;
+        console.log(`WebSocket authenticated as user ${parsedMsg.userId}`);
+      } else if (parsedMsg.type === "UNAUTHENTICATED") {
+        this.authenticated = false;
+        console.error("WebSocket authentication failed:", parsedMsg.message);
+        // Try to refresh token from localStorage in case it changed
+        this.token = localStorage.getItem("token");
+      }
+
       // Handle PRICE_UPDATE messages - symbol is in data object
       if (parsedMsg.type === "PRICE_UPDATE" && parsedMsg.data) {
         const symbol = parsedMsg.data.symbol;
@@ -95,6 +118,11 @@ export class Signalingmanager {
             callback(parsedMsg.data);
           });
         }
+      }
+      // Handle ORDER events (ORDER_OPENED, ORDER_CLOSED, ORDER_LIQUIDATED)
+      else if (parsedMsg.type && parsedMsg.type.startsWith("ORDER_")) {
+        // These events are broadcast to all subscriptions
+        // You can add specific handling here if needed
       }
       // Handle other messages - symbol is at top level
       else if (parsedMsg.symbol) {

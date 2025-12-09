@@ -1,6 +1,8 @@
-import { Kafka } from "kafkajs";
+import { Kafka, logLevel } from "kafkajs";
 import { binanceEmitter } from "./binance";
 import type { Trades } from "./binance"; //  Import Trades type from binance.ts
+
+// Note: KafkaJS timeout warning suppression is handled in index.ts before imports
 
 interface typeofPriceData {
   // interface  to publish the data in kafka
@@ -10,30 +12,59 @@ interface typeofPriceData {
   timestamp: number;
   quantity: string;
 }
+
 //connecting it with Docker
 const kafka = new Kafka({
   clientId: "exness_cfd_producer",
   brokers: process.env.KAFKA_BROKERS?.split(",") || ["localhost:9092"],
+  logLevel: logLevel.NOTHING, // Suppress all Kafka logs - we handle errors in catch blocks
+  connectionTimeout: 10000, // 10 seconds
+  requestTimeout: 30000, // 30 seconds
+  retry: {
+    initialRetryTime: 300,
+    retries: 10,
+    maxRetryTime: 30000,
+    multiplier: 2,
+    restartOnFailure: async (e: any) => {
+      // Only restart on network errors, not on fatal errors
+      return e.retriable === true;
+    },
+  },
+});
+
+// CRITICAL FIX: Configure producer with explicit acks and timeout to prevent negative timeout bug
+const producer = kafka.producer({
+  allowAutoTopicCreation: true,
+  transactionTimeout: 30000, // 30 seconds
+  // IMPORTANT: These settings prevent the negative timeout warning
   retry: {
     initialRetryTime: 100,
     retries: 8,
   },
-});
-
-const producer = kafka.producer(); // create producer instance
+}); // create producer instance
 
 let tradeListener: ((tradeData: Trades) => Promise<void>) | null = null; //  Properly typed listener Store it to remove later and prevent memory leaks
 let isShuttingDown = false;
+let isConnected = false; // Track connection state
 
 export async function kafkaproduce() {
-  if (isShuttingDown) return;
+  if (isShuttingDown || isConnected) return;
+
+  // Wait for Kafka to be ready (5 second delay on first start)
+  await new Promise(resolve => setTimeout(resolve, 5000));
+
   try {
-    //Connceting kafka producer
+    //Connecting kafka producer
+    console.log("Connecting to Kafka producer...");
     await producer.connect();
-    console.log("Kafka Publisher Connected Sucessfully!!!!!!!");
+    isConnected = true;
+    console.log("✓ Kafka Producer connected successfully");
 
     // Added this - Assign function to variable so we can remove it later
     tradeListener = async (tradeData: Trades) => {
+      // Skip if shutting down or not connected
+      if (isShuttingDown || !isConnected) return;
+
       try {
         const publishTrade: typeofPriceData = {
           symbol: tradeData.symbol,
@@ -42,58 +73,71 @@ export async function kafkaproduce() {
           timestamp: tradeData.timestamp,
           quantity: tradeData.quantity,
         };
+        // CRITICAL FIX: Add explicit timeout and acks to prevent negative timeout warning
         await producer.send({
           topic: "trades",
+          timeout: 30000, // Explicit 30s timeout
+          acks: 1, // Wait for leader acknowledgment only (not all replicas)
+          compression: 1, // GZIP compression (optional performance boost)
           messages: [
             {
               key: tradeData.symbol,
               value: JSON.stringify(publishTrade),
+              // Add explicit timestamp to message metadata (not just in payload)
+              timestamp: String(Date.now()),
             },
           ],
         });
       } catch (error) {
-        console.error("Error processing kafka trade data:", error);
+        // Only log if it's a critical error
+        if (error instanceof Error && !error.message.includes("retriable")) {
+          console.error("Error processing kafka trade data:", error.message);
+        }
       }
     };
-    //getting the data from binace.ts ws emiiter{functioon call heppening}
+    //getting the data from binance.ts ws emitter
     binanceEmitter.on("trade", tradeListener);
   } catch (err) {
-    console.error(
-      "problem in connecting with kafka retrying in 3 seconds",
-      err,
-    );
+    isConnected = false;
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    console.error(`✗ Kafka producer connection failed: ${errorMessage}`);
+    console.log("Retrying in 5 seconds...");
+
     //  Remove old listener before reconnecting to prevent duplicates
     if (tradeListener) {
       binanceEmitter.removeListener("trade", tradeListener);
+      tradeListener = null;
     }
 
     if (!isShuttingDown) {
       setTimeout(() => {
         kafkaproduce();
-      }, 3000);
+      }, 5000);
     }
   }
 }
 
-async function gracefulShutdown(signal: string) {
-  // signal is a string like "SIGTERM", "SIGINT" basically the type :signal
+// Export cleanup function for coordinated shutdown from main index.ts
+export async function shutdownProducer() {
+  if (isShuttingDown) return;
+
   isShuttingDown = true;
-  console.log(`${signal} received: Starting graceful shutdown...`);
+  console.log("Shutting down Kafka producer...");
+
   try {
+    // Remove event listener first to stop receiving new trades
     if (tradeListener) {
       binanceEmitter.removeListener("trade", tradeListener);
+      tradeListener = null;
     }
 
-    await producer.disconnect();
-    console.log("Kafka producer disconnected successfully");
+    // Disconnect producer if connected
+    if (isConnected) {
+      await producer.disconnect();
+      isConnected = false;
+      console.log("✓ Kafka producer disconnected successfully");
+    }
   } catch (error) {
-    console.error("Error during Kafka producer shutdown:", error);
+    console.error("✗ Error during Kafka producer shutdown:", error);
   }
 }
-
-process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
-process.on("SIGINT", () => gracefulShutdown("SIGINT"));
-process.on("unhandledRejection", async (reason, promise) => {
-  console.error("Unhandled Promise Rejection:", reason);
-  await gracefulShutdown("UNHANDLED_REJECTION");
-});

@@ -10,8 +10,8 @@ CREATE TABLE "Trade" (
     CONSTRAINT "Trade_pkey" PRIMARY KEY ("id","timestamp")
 );
 
--- CreateIndex
-CREATE UNIQUE INDEX "Trade_tradeId_key" ON "Trade"("tradeId");
+-- CreateIndex (includes timestamp for TimescaleDB compatibility)
+CREATE UNIQUE INDEX "Trade_tradeId_timestamp_key" ON "Trade"("tradeId", "timestamp");
 
 -- CreateIndex
 CREATE INDEX "Trade_symbol_timestamp_idx" ON "Trade"("symbol", "timestamp");

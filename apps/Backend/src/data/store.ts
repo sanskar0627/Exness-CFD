@@ -4,12 +4,12 @@ import { toInternalUSD, Asset, SUPPORTED_ASSETS } from "shared";
 //Storing in In Memory right now The USer Details
 export const StoreData = new Map<string, User>();
 const INITIAL_BALANCE_USD: number =
-  Number(process.env.INITIAL_BALANCE_USD) || 5000;
+  Number(process.env.INITIAL_BALANCE_USD) || 50000;
 const INITIAL_BALANCE_CENTS = toInternalUSD(INITIAL_BALANCE_USD);
-//I am using this map just to store email on the index so i dont have to loop  through it
-const emailToUserId = new Map<string, string>();
+// Email to UserId mapping for fast lookup - exported for state restoration
+export const emailToUserId = new Map<string, string>();
 export const orderStorageMap = new Map<string, Map<string, Order>>(); // Order Storage map
-export const ClodeStorageMap = new Map<string, Map<string, ClosedOrder>>(); // close order Storage map
+export const ClosedStorageMap = new Map<string, Map<string, ClosedOrder>>(); // Closed order Storage map
 export const PriceStorageMp = new Map<Asset, PriceData>(); // Stores the PRices of BTC<ETH AND SOL realtime  for liquidation and logic calucltion
 // Initialize PRICESTORE with default values
 SUPPORTED_ASSETS.forEach((asset) => {
@@ -17,13 +17,13 @@ SUPPORTED_ASSETS.forEach((asset) => {
 });
 
 //USer Created
-export function CreateUser(userId: string, email: string, password: string) {
+export function CreateUser(userId: string, email: string, password: string, balanceCents?: number) {
   const USerObj: User = {
     userId: userId,
     email: email,
     password: password,
     balance: {
-      usd_balance: INITIAL_BALANCE_CENTS,
+      usd_balance: balanceCents !== undefined ? balanceCents : INITIAL_BALANCE_CENTS,
     },
     assets: {} as Record<Asset, number>,
   };
@@ -122,7 +122,7 @@ export function getUserCloseOrders(userId: string): Map<string, ClosedOrder> {
   // Special case: "all" returns combined orders from all users
   if (userId === "all") {
     const allOrders = new Map<string, ClosedOrder>();
-    ClodeStorageMap.forEach((userOrders) => {
+    ClosedStorageMap.forEach((userOrders) => {
       userOrders.forEach((order, orderId) => {
         allOrders.set(orderId, order);
       });
@@ -130,10 +130,10 @@ export function getUserCloseOrders(userId: string): Map<string, ClosedOrder> {
     return allOrders;
   }
   
-  const result = ClodeStorageMap.get(userId); //To check user exsist
+  const result = ClosedStorageMap.get(userId); //To check user exsist
   if (!result) {
-    ClodeStorageMap.set(userId, new Map<string, ClosedOrder>());
+    ClosedStorageMap.set(userId, new Map<string, ClosedOrder>());
   }
-  return ClodeStorageMap.get(userId)!;
+  return ClosedStorageMap.get(userId)!;
 }
 

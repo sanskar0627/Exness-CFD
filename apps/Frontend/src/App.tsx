@@ -1,8 +1,8 @@
-import { Route } from "react-router";
-import { BrowserRouter, Routes } from "react-router";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Signin from "./pages/Singin";
 import Signup from "./pages/Signup";
 import Trading from "./pages/Trading";
+import AuthCallback from "./pages/AuthCallback";
 import "aos/dist/aos.css";
 import ExnessLanding from "./pages/Homepage";
 
@@ -15,6 +15,7 @@ function App() {
           <Route path="/signin" element={<Signin />} />
           <Route path="/signup" element={<Signup />} />
           <Route path="/trading" element={<Trading />} />
+          <Route path="/auth/callback" element={<AuthCallback />} />
         </Routes>
       </BrowserRouter>
     </div>

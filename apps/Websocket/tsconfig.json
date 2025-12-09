@@ -8,8 +8,10 @@
     "skipLibCheck": true,
     "types": ["bun"],
     "paths": {
-      "shared": ["../../packages/shared/src/index.ts"]
+      "shared": ["../../packages/shared/src/index.ts"],
+      "database": ["../../packages/database/src/index.ts"]
     }
   },
-  "include": ["src/**/*"]
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"]
 }

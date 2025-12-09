@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { closetrade, getclosedtrades, getopentrades } from "../api/trade";
+import { useEffect, useMemo, useState, useCallback } from "react";
+import { closetrade, getclosedtrades, getopentrades, partialCloseTrade, addMarginToTrade } from "../api/trade";
 import {
   calculatePnlCents,
   toDisplayPrice,
@@ -26,7 +26,7 @@ interface ClosedOrder extends OpenOrder {
 
 type OpenOrderWithPnl = OpenOrder & { pnlUsd: number };
 
-export default function OrdersPanel() {
+export default function OrdersPanel({ onRefreshReady }: { onRefreshReady?: (refresh: () => void) => void }) {
   const [activeTab, setActiveTab] = useState<"open" | "closed">("open");
   const [openOrders, setOpenOrders] = useState<OpenOrder[]>([]);
   const [closedOrders, setClosedOrders] = useState<ClosedOrder[]>([]);
@@ -34,37 +34,45 @@ export default function OrdersPanel() {
   const [isClosingPosition, setIsClosingPosition] = useState<string | null>(
     null
   );
+  const [showPartialCloseModal, setShowPartialCloseModal] = useState<string | null>(null);
+  const [showAddMarginModal, setShowAddMarginModal] = useState<string | null>(null);
+  const [partialClosePercentage, setPartialClosePercentage] = useState<string>("50");
+  const [additionalMargin, setAdditionalMargin] = useState<string>("100");
   const [latestPrices, setLatestPrices] = useState<LivePrices>({
     BTC: { bid: 0, ask: 0 },
     ETH: { bid: 0, ask: 0 },
     SOL: { bid: 0, ask: 0 },
   });
 
-  const fetchOpenOrders = async () => {
-    setIsLoading(true);
+  const fetchOpenOrders = useCallback(async (background = false) => {
+    if (!background) setIsLoading(true);
     try {
       const token = localStorage.getItem("token") || "";
 
       const response = await getopentrades(token);
-      setOpenOrders(response?.data.trades || []);
+      if (response?.data?.orders) {
+        setOpenOrders(response.data.orders);
+      } else {
+        setOpenOrders([]);
+      }
     } catch (error) {
       console.error("Error fetching open orders:", error);
     } finally {
-      setIsLoading(false);
+      if (!background) setIsLoading(false);
     }
-  };
+  }, []);
 
-  const fetchClosedOrders = async () => {
-    setIsLoading(true);
+  const fetchClosedOrders = async (background = false) => {
+    if (!background) setIsLoading(true);
     try {
       const token = localStorage.getItem("token") || "";
 
       const response = await getclosedtrades(token);
-      setClosedOrders(response.data.trades || []);
+      setClosedOrders(response.data.orders || []);
     } catch (error) {
       console.error("Error fetching closed orders:", error);
     } finally {
-      setIsLoading(false);
+      if (!background) setIsLoading(false);
     }
   };
 
@@ -78,14 +86,21 @@ export default function OrdersPanel() {
     // Set up polling to refresh data
     const intervalId = setInterval(() => {
       if (activeTab === "open") {
-        fetchOpenOrders();
+        fetchOpenOrders(true);
       } else {
-        fetchClosedOrders();
+        fetchClosedOrders(true);
       }
     }, 5000);
 
     return () => clearInterval(intervalId);
-  }, [activeTab]);
+  }, [activeTab, fetchOpenOrders]);
+
+  // Expose refresh function to parent
+  useEffect(() => {
+    if (onRefreshReady) {
+      onRefreshReady(fetchOpenOrders);
+    }
+  }, [onRefreshReady, fetchOpenOrders]);
 
   useEffect(() => {
     const unsubscribe = subscribePrices((p: LivePrices) => {
@@ -169,6 +184,57 @@ export default function OrdersPanel() {
     }
   };
 
+  const handlePartialClose = async (orderId: string) => {
+    try {
+      setIsClosingPosition(orderId);
+      const token = localStorage.getItem("token") || "";
+
+      const percentage = parseFloat(partialClosePercentage);
+      if (isNaN(percentage) || percentage < 1 || percentage > 99) {
+        alert("Please enter a valid percentage between 1 and 99");
+        setIsClosingPosition(null);
+        return;
+      }
+
+      await partialCloseTrade(orderId, percentage, token);
+
+      setShowPartialCloseModal(null);
+      setPartialClosePercentage("50"); // Reset to default
+      fetchOpenOrders();
+      fetchClosedOrders();
+    } catch (error) {
+      console.error("Error partial closing position:", error);
+      alert("Failed to partial close position: " + (error as Error).message);
+    } finally {
+      setIsClosingPosition(null);
+    }
+  };
+
+  const handleAddMargin = async (orderId: string) => {
+    try {
+      setIsClosingPosition(orderId);
+      const token = localStorage.getItem("token") || "";
+
+      const margin = parseFloat(additionalMargin);
+      if (isNaN(margin) || margin < 10) {
+        alert("Please enter a valid amount (minimum $10)");
+        setIsClosingPosition(null);
+        return;
+      }
+
+      await addMarginToTrade(orderId, margin, token);
+
+      setShowAddMarginModal(null);
+      setAdditionalMargin("100"); // Reset to default
+      fetchOpenOrders();
+    } catch (error) {
+      console.error("Error adding margin:", error);
+      alert("Failed to add margin: " + (error as Error).message);
+    } finally {
+      setIsClosingPosition(null);
+    }
+  };
+
   return (
     <div className="bg-neutral-900/80 backdrop-blur-xl border border-neutral-600 rounded-lg w-full h-full flex flex-col">
       <div className="flex border-b border-neutral-600/40">
@@ -211,7 +277,7 @@ export default function OrdersPanel() {
                   <span>Close to TP/SL</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-red-500 animate-pulse">⚠</span>
+                  <span className="text-red-500 animate-pulse">!</span>
                   <span>Near Liquidation</span>
                 </div>
               </div>
@@ -221,6 +287,7 @@ export default function OrdersPanel() {
                 <table className="w-full text-sm">
                   <thead className="sticky top-0 bg-neutral-900/80 backdrop-blur-sm z-10">
                     <tr className="text-xs text-neutral-400 border-b border-neutral-600/40">
+                      <th className="py-3 px-3 text-left font-medium w-12">#</th>
                       <th className="py-3 px-3 text-left font-medium">Symbol</th>
                       <th className="py-3 px-3 text-right font-medium">Type</th>
                       <th className="py-3 px-3 text-right font-medium">Margin</th>
@@ -234,7 +301,7 @@ export default function OrdersPanel() {
                     </tr>
                   </thead>
                   <tbody>
-                    {openWithPnl.map((order) => {
+                    {openWithPnl.map((order, index) => {
                       const { tpStatus, slStatus } = getTpSlStatus(order);
                       const sym = (order.asset || "BTC").replace("USDT", "");
                       const p = latestPrices[sym as keyof LivePrices];
@@ -270,6 +337,9 @@ export default function OrdersPanel() {
                               : ""
                           }`}
                         >
+                          <td className="py-3 px-3 text-left text-neutral-400 font-medium">
+                            {index + 1}
+                          </td>
                           <td className="py-3 px-3 font-medium text-neutral-50">
                             {order.asset || "BTC"}
                             <span className="text-neutral-400 text-xs">/USDT</span>
@@ -371,7 +441,7 @@ export default function OrdersPanel() {
                                   if (distance < 0.05) {
                                     return (
                                       <span className="text-red-500 text-xs animate-pulse">
-                                        ⚠
+                                        !
                                       </span>
                                     );
                                   }
@@ -393,20 +463,49 @@ export default function OrdersPanel() {
                             {toDisplayPriceUSD(order.pnlUsd)} USD
                           </td>
                           <td className="py-3 px-3 text-right">
-                            <button
-                              onClick={() => closePosition(order.orderId)}
-                              disabled={isClosingPosition === order.orderId}
-                              className={`px-3 py-2 text-neutral-50 rounded text-sm font-medium transition-colors
-                            ${
-                              isClosingPosition === order.orderId
-                                ? "bg-neutral-600 cursor-not-allowed"
-                                : "bg-[#EB483F] hover:bg-[#EB483F]/80"
-                            }`}
-                            >
-                              {isClosingPosition === order.orderId
-                                ? "Closing..."
-                                : "Close"}
-                            </button>
+                            <div className="flex items-center justify-end gap-1">
+                              <button
+                                onClick={() => closePosition(order.orderId)}
+                                disabled={isClosingPosition === order.orderId}
+                                title="Close 100%"
+                                className={`px-2 py-1 text-neutral-50 rounded text-xs font-medium transition-colors
+                                ${
+                                  isClosingPosition === order.orderId
+                                    ? "bg-neutral-600 cursor-not-allowed"
+                                    : "bg-[#EB483F] hover:bg-[#EB483F]/80"
+                                }`}
+                              >
+                                {isClosingPosition === order.orderId
+                                  ? "..."
+                                  : "Close"}
+                              </button>
+                              <button
+                                onClick={() => setShowPartialCloseModal(order.orderId)}
+                                disabled={isClosingPosition === order.orderId}
+                                title="Partial Close"
+                                className={`px-2 py-1 text-neutral-50 rounded text-xs font-medium transition-colors
+                                ${
+                                  isClosingPosition === order.orderId
+                                    ? "bg-neutral-600 cursor-not-allowed"
+                                    : "bg-yellow-600 hover:bg-yellow-600/80"
+                                }`}
+                              >
+                                Part
+                              </button>
+                              <button
+                                onClick={() => setShowAddMarginModal(order.orderId)}
+                                disabled={isClosingPosition === order.orderId}
+                                title="Add Margin"
+                                className={`px-2 py-1 text-neutral-50 rounded text-xs font-medium transition-colors
+                                ${
+                                  isClosingPosition === order.orderId
+                                    ? "bg-neutral-600 cursor-not-allowed"
+                                    : "bg-blue-600 hover:bg-blue-600/80"
+                                }`}
+                              >
+                                +M
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -419,12 +518,142 @@ export default function OrdersPanel() {
                 No open positions
               </div>
             )}
+
+            {/* Partial Close Modal */}
+            {showPartialCloseModal && (
+              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => {
+                setShowPartialCloseModal(null);
+                setPartialClosePercentage("50");
+              }}>
+                <div className="bg-neutral-900 border border-neutral-600 rounded-lg p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
+                  <h3 className="text-lg font-semibold text-neutral-50 mb-4">Partial Close Position</h3>
+                  <div className="mb-4">
+                    <label className="block text-sm text-neutral-400 mb-2">Close Percentage (%)</label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={partialClosePercentage}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        // Allow empty string or valid number
+                        if (value === "" || /^\d+$/.test(value)) {
+                          setPartialClosePercentage(value);
+                        }
+                      }}
+                      onFocus={(e) => {
+                        // Clear default value on focus for better UX
+                        if (e.target.value === "50") {
+                          setPartialClosePercentage("");
+                        }
+                      }}
+                      onBlur={(e) => {
+                        // Restore default if empty on blur
+                        if (e.target.value === "") {
+                          setPartialClosePercentage("50");
+                        }
+                      }}
+                      className="w-full px-3 py-2 bg-neutral-800 border border-neutral-600 rounded text-neutral-50 focus:outline-none focus:border-yellow-500"
+                      placeholder="50"
+                    />
+                    <p className="text-xs text-neutral-500 mt-1">Enter 1-99% (cannot close 100% here)</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowPartialCloseModal(null);
+                        setPartialClosePercentage("50");
+                      }}
+                      className="flex-1 px-4 py-2 bg-neutral-700 hover:bg-neutral-600 text-neutral-50 rounded text-sm font-medium transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handlePartialClose(showPartialCloseModal);
+                      }}
+                      disabled={isClosingPosition === showPartialCloseModal}
+                      className="flex-1 px-4 py-2 bg-yellow-600 hover:bg-yellow-600/80 text-neutral-50 rounded text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isClosingPosition === showPartialCloseModal ? "Closing..." : `Confirm Close ${partialClosePercentage}%`}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Add Margin Modal */}
+            {showAddMarginModal && (
+              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => {
+                setShowAddMarginModal(null);
+                setAdditionalMargin("100");
+              }}>
+                <div className="bg-neutral-900 border border-neutral-600 rounded-lg p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
+                  <h3 className="text-lg font-semibold text-neutral-50 mb-4">Add Margin to Position</h3>
+                  <div className="mb-4">
+                    <label className="block text-sm text-neutral-400 mb-2">Additional Margin ($)</label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={additionalMargin}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        // Allow empty string or valid number (including decimals)
+                        if (value === "" || /^\d*\.?\d*$/.test(value)) {
+                          setAdditionalMargin(value);
+                        }
+                      }}
+                      onFocus={(e) => {
+                        // Clear default value on focus for better UX
+                        if (e.target.value === "100") {
+                          setAdditionalMargin("");
+                        }
+                      }}
+                      onBlur={(e) => {
+                        // Restore default if empty on blur
+                        if (e.target.value === "") {
+                          setAdditionalMargin("100");
+                        }
+                      }}
+                      className="w-full px-3 py-2 bg-neutral-800 border border-neutral-600 rounded text-neutral-50 focus:outline-none focus:border-blue-500"
+                      placeholder="100"
+                    />
+                    <p className="text-xs text-neutral-500 mt-1">Minimum $10 USD</p>
+                    <p className="text-xs text-blue-400 mt-2">Adding margin reduces liquidation risk by lowering effective leverage</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowAddMarginModal(null);
+                        setAdditionalMargin("100");
+                      }}
+                      className="flex-1 px-4 py-2 bg-neutral-700 hover:bg-neutral-600 text-neutral-50 rounded text-sm font-medium transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleAddMargin(showAddMarginModal);
+                      }}
+                      disabled={isClosingPosition === showAddMarginModal}
+                      className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-600/80 text-neutral-50 rounded text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isClosingPosition === showAddMarginModal ? "Adding..." : `Add $${additionalMargin}`}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </>
         ) : closedOrders.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-xs text-neutral-400 border-b border-neutral-600/40">
+                  <th className="py-3 px-3 text-left font-medium w-12">#</th>
                   <th className="py-3 px-3 text-left font-medium">Symbol</th>
                   <th className="py-3 px-3 text-right font-medium">Type</th>
                   <th className="py-3 px-3 text-right font-medium">Margin</th>
@@ -434,11 +663,14 @@ export default function OrdersPanel() {
                 </tr>
               </thead>
               <tbody>
-                {closedOrders.map((order) => (
+                {closedOrders.map((order, index) => (
                   <tr
                     key={order.orderId}
                     className="border-b border-neutral-600/20 hover:bg-neutral-800/50"
                   >
+                    <td className="py-3 px-3 text-left text-neutral-400 font-medium">
+                      {index + 1}
+                    </td>
                     <td className="py-3 px-3 font-medium text-neutral-50">
                       {order.asset || "BTC"}
                       <span className="text-neutral-400 text-xs">/USDT</span>

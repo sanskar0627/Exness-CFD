@@ -5,6 +5,7 @@ import { fromInternalPrice } from "shared";
 import { SUPPORTED_ASSETS } from "shared";
 import { getCandelFromDb } from '../services/services';
 import { TimeDurationCandel, ValidSymbol } from "../types";
+import { apiRateLimit, chartDataRateLimit } from "../middleware/rateLimit";
 
 export const assetRouter = Router();
 
@@ -25,7 +26,7 @@ const ASSET_METADATA = {
 };
 
 // GET /api/v2/asset - Get all assets with current prices
-assetRouter.get("/", (req: Request, res: Response): void => {
+assetRouter.get("/", apiRateLimit, (req: Request, res: Response): void => {
   try {
     // Fallback prices for each asset (in case Price_Poller isn't running)
     const FALLBACK_PRICES: Record<string, { bid: number; ask: number }> = {
@@ -69,7 +70,7 @@ assetRouter.get("/", (req: Request, res: Response): void => {
 
 // GET /api/v2/candles - Get candlestick data 
 
-assetRouter.get("/candles", async (req: Request, res: Response): Promise<void> => {
+assetRouter.get("/candles", chartDataRateLimit, async (req: Request, res: Response): Promise<void> => {
   try {
       // Extract query parameters
       const { asset, ts, startTime, endTime } = req.query;

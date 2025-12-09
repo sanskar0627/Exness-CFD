@@ -1,6 +1,6 @@
 import { TimeDurationCandel, Candle, ValidSymbol } from "../types";
 import { fromInternalPrice } from "shared";
-import { prisma } from "database";
+import { prisma, Prisma } from "database";
 import { number, string } from "zod";
 import { closeOrder } from "../utils/tradeUtils";
 
@@ -23,11 +23,28 @@ export async function getCandelFromDb(
   if (!symbol || symbol.trim() === "") {
     throw new Error("Symbol Parameter is not Thier !");
   }
-  // checking  startTime must be before endTime to prevent querying future data
-  if (startTime >= endTime) {
-    console.log("Cant Show Future Data");
-    throw new Error("Something went wrong!, Cant SHow Future Data");
+
+  const now = Math.floor(Date.now() / 1000);
+
+  // If requesting entirely future data, return empty array (no error)
+  if (startTime > now) {
+    console.log(`[CANDLES] Future data requested for ${symbol} (start: ${startTime}, now: ${now}), returning empty`);
+    return [];
   }
+
+  // Clamp endTime to current time to avoid querying future data
+  if (endTime > now) {
+    console.log(`[CANDLES] endTime ${endTime} is in future, clamping to now ${now}`);
+    endTime = now;
+  }
+
+  // Check that startTime is before or equal to endTime
+  // Note: We allow startTime === endTime for single-point queries
+  if (startTime > endTime) {
+    console.error(`[CANDLES] Invalid time range: startTime (${startTime}) > endTime (${endTime})`);
+    throw new Error("Invalid time range: startTime must be before or equal to endTime");
+  }
+
   const SymbolMap = {
     BTC: "BTCUSDT",
     ETH: "ETHUSDT",
@@ -52,25 +69,33 @@ export async function getCandelFromDb(
   const startDate = new Date(startTime * 1000);
   const endDate = new Date(endTime * 1000);
   const pgInterval = IntervalConfig[interval].pgInterval;
-  // Query database
-  const results = await prisma.$queryRaw`
-      SELECT
-        time_bucket(${pgInterval}, timestamp) AS time,
-        (array_agg(price ORDER BY timestamp))[1] AS open,
-        MAX(price) AS high,
-        MIN(price) AS low,
-        (array_agg(price ORDER BY timestamp DESC))[1] AS close,
-        SUM(CAST(quantity AS DECIMAL)) AS volume
-      FROM "Trade"
-      WHERE symbol = ${dbSymbol}
-        AND timestamp >= ${startDate}
-        AND timestamp <= ${endDate}
-      GROUP BY time_bucket(${pgInterval}, timestamp)
-      ORDER BY time ASC
-      LIMIT 1000;
-    `;
+
+  console.log(`[CANDLES] Querying ${dbSymbol} ${interval} from ${startDate.toISOString()} to ${endDate.toISOString()}`);
+
+  // Query database - Using $queryRawUnsafe for proper INTERVAL type casting
+  // Note: pgInterval, dbSymbol are safe as they come from controlled config/maps, not user input
+  const results = await prisma.$queryRawUnsafe(`
+    SELECT
+      time_bucket(INTERVAL '${pgInterval}', timestamp) AS time,
+      (array_agg(price ORDER BY timestamp))[1] AS open,
+      MAX(price) AS high,
+      MIN(price) AS low,
+      (array_agg(price ORDER BY timestamp DESC))[1] AS close,
+      SUM(CAST(quantity AS DECIMAL)) AS volume
+    FROM "Trade"
+    WHERE symbol = $1
+      AND timestamp >= $2
+      AND timestamp <= $3
+    GROUP BY time_bucket(INTERVAL '${pgInterval}', timestamp)
+    ORDER BY time ASC
+    LIMIT 1000
+  `, dbSymbol, startDate, endDate);
     if (!results || (results as any[]).length === 0) {
-    console.log(`No candles found for ${dbSymbol} from ${startDate} to ${endDate}`);
+    console.warn(`[CANDLES] No candles found for ${dbSymbol} from ${startDate.toISOString()} to ${endDate.toISOString()}`);
+    console.warn(`[CANDLES] This usually means:`);
+    console.warn(`  1. Trade table is empty (Price_Poller not running)`);
+    console.warn(`  2. No trades for this time range`);
+    console.warn(`  3. Symbol mismatch (check database has ${dbSymbol})`);
     return [];
   }
 
@@ -83,6 +108,8 @@ export async function getCandelFromDb(
     close: fromInternalPrice(Number(row.close)),
     volume: row.volume ? row.volume.toString() : "0",
   }));
+
+  console.log(`[CANDLES] Returning ${candles.length} candles for ${dbSymbol} ${interval}`);
 
   return candles;
 }

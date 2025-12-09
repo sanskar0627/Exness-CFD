@@ -133,7 +133,6 @@ export class SubscriptionManager {
     }
     const clientSub = this.assetSubscribers.get(asset);
     if (!clientSub) {
-      console.log("No Client has subscribed it");
       return;
     }
     const strServerMessage = JSON.stringify(message);
@@ -148,8 +147,6 @@ export class SubscriptionManager {
         console.error(`Failed to send to client ${clientId}:`, err);
       }
     }
-    console.log(
-      `Broadcast to ${clientSub.size} clients subscribed to ${asset}`,
-    );
+
   }
 }

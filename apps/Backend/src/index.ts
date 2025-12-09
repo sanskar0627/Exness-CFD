@@ -4,11 +4,14 @@ import cors from "cors";
 import { userRouter } from "./routes/user";
 import { tradeRoutes } from "./routes/trades";
 import { assetRouter } from "./routes/asset";
+import { oauthRouter } from "./routes/oauth";
 import { initOrderBroadcast, stopOrderBroadcast } from "./services/orderBroadcast";
 import { initPriceMonitor, stopPriceMonitor } from "./services/priceMonitor";
 import { startPositionMonitor, stopPositionMonitor } from "./services/positionMonitor";
 import { startSnapshotService, stopSnapshotService } from "./services/snapshotService";
 import { restoreState } from "./services/stateRestoration";
+import { initPlatformProfit } from "./services/platformProfit";
+import { logOAuthStatus } from "./config/oauth";
 
 const app: Express = express();
 const port = Number(process.env.PORT) || 5000;
@@ -17,20 +20,38 @@ const allowedOrigins = Bun.env.CORS_ORIGINS?.split(",") || [
   "http://localhost:3000",
   "http://localhost:5173",
   "http://localhost:5174",
+  "http://localhost:5175",
+  "http://localhost:5176",
+  "http://localhost:5177",
+  "http://localhost:5178",
+  "http://localhost:5179",
 ];
 
-// Apply CORS middleware
+// Apply CORS middleware with explicit origin function
 app.use(
   cors({
-    origin: allowedOrigins,
+    origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps, curl, postman)
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error(`Origin ${origin} not allowed by CORS`));
+      }
+    },
     credentials: true,
   }),
 );
 
 app.use(express.json());
+import { globalRateLimit } from "./middleware/rateLimit";
+app.use(globalRateLimit);
+
 app.use("/api/v2/user", userRouter);
 app.use("/api/v2/trade", tradeRoutes);
 app.use("/api/v2/asset", assetRouter);
+app.use("/api/v2/auth", oauthRouter);
 
 //catch all undefined routes
 app.use((req: Request, res: Response) => {
@@ -40,10 +61,15 @@ app.use((req: Request, res: Response) => {
 // Main async function to initialize services and start server
 async function main() {
   try {
-    // FIRST: Restore state from database (critical for crash recovery)
+    logOAuthStatus();
+
+    //  Restore state from database (critical for crash recovery)
     await restoreState();
 
-    // THEN: Initialize other services
+    //  Initialize platform profit cache (AFTER restoreState so open orders are loaded)
+    await initPlatformProfit();
+
+    //  Initialize other services
     await initPriceMonitor();
     startPositionMonitor();
     await initOrderBroadcast();
