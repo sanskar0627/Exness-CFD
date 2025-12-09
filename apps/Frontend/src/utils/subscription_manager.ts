@@ -121,7 +121,6 @@ export class Signalingmanager {
       }
       // Handle ORDER events (ORDER_OPENED, ORDER_CLOSED, ORDER_LIQUIDATED)
       else if (parsedMsg.type && parsedMsg.type.startsWith("ORDER_")) {
-        console.log("Received order event:", parsedMsg.type, parsedMsg);
         // These events are broadcast to all subscriptions
         // You can add specific handling here if needed
       }

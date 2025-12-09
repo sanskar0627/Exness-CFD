@@ -57,8 +57,6 @@ export function processRealupdate(
       low: price,
       close: price,
     };
-    // Only log new candles (not every update)
-    console.log(`[CANDLE] New ${duration} candle for ${trade.symbol} at ${new Date(currentbucket * 1000).toISOString()}`);
   } else {
     // Update existing candle - same time bucket
     lastCandle = {

@@ -206,8 +206,16 @@ export default function BuySell({
     }
 
     // CRITICAL FIX: Validate Trailing Stop Loss minimum distance
-    if (tslEnabled && tslDistance) {
+    if (tslEnabled) {
       const tslDistanceValue = Number(tslDistance);
+
+      // Check if TSL distance is empty or invalid
+      if (!tslDistance || isNaN(tslDistanceValue) || tslDistanceValue <= 0) {
+        setError(`Invalid Trailing Stop Loss. Please enter a valid distance (minimum $10)`);
+        setTimeout(() => setError(""), 4000);
+        return;
+      }
+
       if (tslDistanceValue < 10) {
         setError(`Invalid Trailing Stop Loss. Minimum distance is $10 to prevent instant closure (you entered $${tslDistance})`);
         setTimeout(() => setError(""), 4000);
@@ -216,6 +224,35 @@ export default function BuySell({
       if (tslDistanceValue > 10000) {
         setError(`Invalid Trailing Stop Loss. Maximum distance is $10,000 (you entered $${tslDistance})`);
         setTimeout(() => setError(""), 4000);
+        return;
+      }
+
+      // CRITICAL: Validate TSL distance doesn't exceed distance to liquidation
+      // Calculate liquidation price to determine max allowed TSL
+      const entryPrice = activeTab === "buy" ? askPrice : bidPrice;
+
+      // Liquidation calculation (simplified from backend logic)
+      // For BUY: liq = entry * (1 - 1/leverage)
+      // For SELL: liq = entry * (1 + 1/leverage)
+      let liquidationPrice: number;
+      if (activeTab === "buy") {
+        liquidationPrice = entryPrice * (1 - 1 / leverage);
+      } else {
+        liquidationPrice = entryPrice * (1 + 1 / leverage);
+      }
+
+      const distanceToLiquidation = Math.abs(entryPrice - liquidationPrice);
+
+      // TSL must be less than distance to liquidation
+      if (tslDistanceValue >= distanceToLiquidation) {
+        const maxAllowed = Math.floor(distanceToLiquidation * 0.95); // 95% of distance for safety
+        setError(
+          `Trailing Stop Loss too large for ${leverage}x leverage. ` +
+          `With ${symbol} at $${entryPrice.toFixed(2)}, liquidation is at $${liquidationPrice.toFixed(2)}. ` +
+          `Max TSL distance: $${maxAllowed}. You entered: $${tslDistanceValue}. ` +
+          `Reduce leverage or TSL distance.`
+        );
+        setTimeout(() => setError(""), 10000);
         return;
       }
     }
@@ -239,9 +276,7 @@ export default function BuySell({
         tslDistance,
         token,
       });
-      
-      console.log("Response from backend:", response);
-      
+
       if (response && response.order && response.order.orderId) {
         setSuccess(`Order placed successfully!`);
         setTimeout(() => setSuccess(""), 3000);
@@ -258,8 +293,26 @@ export default function BuySell({
       }
     } catch (err) {
       if (axios.isAxiosError(err)) {
-        setError(err.response?.data?.message || "Failed to place order");
-        setTimeout(() => setError(""), 3000);
+        // Handle validation errors from backend (contains error + details)
+        const errorData = err.response?.data;
+        let errorMessage = "Failed to place order";
+
+        if (errorData?.error) {
+          errorMessage = errorData.error;
+
+          // If there are validation details, show the first one
+          if (errorData?.details && Array.isArray(errorData.details) && errorData.details.length > 0) {
+            errorMessage = `${errorData.error}: ${errorData.details[0].message}`;
+          }
+        } else if (errorData?.message) {
+          errorMessage = errorData.message;
+        }
+
+        // Log full error for debugging
+        console.error("Trade error:", errorData);
+
+        setError(errorMessage);
+        setTimeout(() => setError(""), 8000); // Show for 8 seconds for longer error messages
       } else {
         setError("An unexpected error occurred");
         setTimeout(() => setError(""), 3000);
@@ -562,8 +615,8 @@ export default function BuySell({
             </div>
           </div>
 
-          <div className="grid grid-cols-6 gap-1.5">
-            {[1, 2, 5, 10, 20, 100].map((lev) => (
+          <div className="grid grid-cols-5 gap-1.5">
+            {[1, 5, 10, 20, 100].map((lev) => (
               <button
                 key={lev}
                 type="button"
@@ -930,16 +983,54 @@ export default function BuySell({
                 <div className="text-[10px] text-white/40">
                   Locks in profit as price moves in your favor. Stop loss moves with price but never reverses.
                 </div>
-                <div className="text-[10px] text-yellow-500/60">
-                  Minimum: $10 | Recommended: $50-$500
-                </div>
+                {(() => {
+                  // Calculate max allowed TSL based on current leverage and price
+                  const entryPrice = activeTab === "buy" ? askPrice : bidPrice;
+                  const liquidationPrice = activeTab === "buy"
+                    ? entryPrice * (1 - 1 / leverage)
+                    : entryPrice * (1 + 1 / leverage);
+                  const distanceToLiquidation = Math.abs(entryPrice - liquidationPrice);
+                  const maxTsl = Math.floor(distanceToLiquidation * 0.95);
+
+                  return (
+                    <div className="text-[10px] text-yellow-500/60">
+                      Minimum: $10 | Maximum for {leverage}x leverage: ${maxTsl.toFixed(0)}
+                    </div>
+                  );
+                })()}
                 <div className="flex items-center justify-between">
                   <div className="text-[10px] text-white/50">
                     Distance from peak:
                   </div>
-                  <div className="text-[10px] text-yellow-400 bg-yellow-500/10 px-1.5 py-0.5 rounded">
-                    ${tslDistance}
-                  </div>
+                  {(() => {
+                    // Calculate percentage of max to show warning colors
+                    const entryPrice = activeTab === "buy" ? askPrice : bidPrice;
+                    const liquidationPrice = activeTab === "buy"
+                      ? entryPrice * (1 - 1 / leverage)
+                      : entryPrice * (1 + 1 / leverage);
+                    const distanceToLiquidation = Math.abs(entryPrice - liquidationPrice);
+                    const maxTsl = distanceToLiquidation * 0.95;
+                    const currentValue = Number(tslDistance) || 0;
+                    const percentage = (currentValue / maxTsl) * 100;
+
+                    // Color coding based on how close to max
+                    let colorClass = "text-yellow-400 bg-yellow-500/10";
+                    if (percentage >= 95) {
+                      colorClass = "text-red-400 bg-red-500/10";
+                    } else if (percentage >= 80) {
+                      colorClass = "text-orange-400 bg-orange-500/10";
+                    } else if (percentage >= 60) {
+                      colorClass = "text-yellow-400 bg-yellow-500/10";
+                    } else {
+                      colorClass = "text-green-400 bg-green-500/10";
+                    }
+
+                    return (
+                      <div className={`text-[10px] px-1.5 py-0.5 rounded ${colorClass}`}>
+                        ${tslDistance} {percentage >= 80 && `(${percentage.toFixed(0)}% of max)`}
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
             )}

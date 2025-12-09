@@ -287,6 +287,7 @@ export default function OrdersPanel({ onRefreshReady }: { onRefreshReady?: (refr
                 <table className="w-full text-sm">
                   <thead className="sticky top-0 bg-neutral-900/80 backdrop-blur-sm z-10">
                     <tr className="text-xs text-neutral-400 border-b border-neutral-600/40">
+                      <th className="py-3 px-3 text-left font-medium w-12">#</th>
                       <th className="py-3 px-3 text-left font-medium">Symbol</th>
                       <th className="py-3 px-3 text-right font-medium">Type</th>
                       <th className="py-3 px-3 text-right font-medium">Margin</th>
@@ -300,7 +301,7 @@ export default function OrdersPanel({ onRefreshReady }: { onRefreshReady?: (refr
                     </tr>
                   </thead>
                   <tbody>
-                    {openWithPnl.map((order) => {
+                    {openWithPnl.map((order, index) => {
                       const { tpStatus, slStatus } = getTpSlStatus(order);
                       const sym = (order.asset || "BTC").replace("USDT", "");
                       const p = latestPrices[sym as keyof LivePrices];
@@ -336,6 +337,9 @@ export default function OrdersPanel({ onRefreshReady }: { onRefreshReady?: (refr
                               : ""
                           }`}
                         >
+                          <td className="py-3 px-3 text-left text-neutral-400 font-medium">
+                            {index + 1}
+                          </td>
                           <td className="py-3 px-3 font-medium text-neutral-50">
                             {order.asset || "BTC"}
                             <span className="text-neutral-400 text-xs">/USDT</span>
@@ -649,6 +653,7 @@ export default function OrdersPanel({ onRefreshReady }: { onRefreshReady?: (refr
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-xs text-neutral-400 border-b border-neutral-600/40">
+                  <th className="py-3 px-3 text-left font-medium w-12">#</th>
                   <th className="py-3 px-3 text-left font-medium">Symbol</th>
                   <th className="py-3 px-3 text-right font-medium">Type</th>
                   <th className="py-3 px-3 text-right font-medium">Margin</th>
@@ -658,11 +663,14 @@ export default function OrdersPanel({ onRefreshReady }: { onRefreshReady?: (refr
                 </tr>
               </thead>
               <tbody>
-                {closedOrders.map((order) => (
+                {closedOrders.map((order, index) => (
                   <tr
                     key={order.orderId}
                     className="border-b border-neutral-600/20 hover:bg-neutral-800/50"
                   >
+                    <td className="py-3 px-3 text-left text-neutral-400 font-medium">
+                      {index + 1}
+                    </td>
                     <td className="py-3 px-3 font-medium text-neutral-50">
                       {order.asset || "BTC"}
                       <span className="text-neutral-400 text-xs">/USDT</span>

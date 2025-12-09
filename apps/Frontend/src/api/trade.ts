@@ -202,12 +202,16 @@ export async function createTrade({
       payload.stopLoss = Number(slPrice);
     }
     if (tslEnabled) {
+      const trailingDistanceNum = Number(tslDistance);
+      // Safeguard: ensure it's a valid number, not NaN
+      if (isNaN(trailingDistanceNum) || trailingDistanceNum <= 0) {
+        throw new Error(`Invalid trailing distance: ${tslDistance}`);
+      }
       payload.trailingStopLoss = {
         enabled: true,
-        trailingDistance: Number(tslDistance),
+        trailingDistance: trailingDistanceNum,
       };
     }
-    console.log("Data sent ", payload);
 
     const { data } = await axios.post(`${BASE_URL}/trade/open`, payload, {
       headers: { Authorization: `Bearer ${token}` },
@@ -216,6 +220,9 @@ export async function createTrade({
 
     return data;
   } catch (e) {
+    if (axios.isAxiosError(e) && e.response) {
+      throw new Error(JSON.stringify(e.response.data));
+    }
     throw new Error((e as Error).message);
   }
 }

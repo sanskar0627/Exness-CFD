@@ -24,28 +24,27 @@ tradeRoutes.post(
   tradeOpenRateLimit,
   authMiddleware,
   async (req: Request, res: Response): Promise<void> => {
-    //checking that from body every response is thier or not
-    const { asset, type, margin, leverage } = req.body; //extracted from body
-    const validation = openTradeSchema.safeParse({
-      asset,
-      type,
-      margin,
-      leverage,
-    }); // opentrdaeschme checks eveything propelly
+    // Validate the ENTIRE request body (including optional fields like takeProfit, stopLoss, trailingStopLoss)
+    const validation = openTradeSchema.safeParse(req.body);
+
     if (!validation.success) {
       res.status(400).json({
         error: "Invalid Input",
         details: validation.error.issues,
       });
       return; //  Stop execution
-    } else {
-      const userId = req.userId;
-      if (!userId) {
-        ///Doing this for typescript error
-        res.status(404).json({ error: "User not found" });
-        return;
-      }
-      const user = findUSerId(userId);
+    }
+
+    // Extract validated data from the successful validation
+    const { asset, type, margin, leverage } = validation.data;
+
+    const userId = req.userId;
+    if (!userId) {
+      ///Doing this for typescript error
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+    const user = findUSerId(userId);
       if (!user) {
         console.log(`[BALANCE] User not found: ${userId}`);
         res.status(404).json({ error: "User not found" });
@@ -134,11 +133,11 @@ tradeRoutes.post(
           return;
         }
         
-        // Set minimum TSL distance to prevent instant triggers (0.1% of entry price)
-        const minTslDistance = fromInternalPrice(entryPrice) * 0.001; // 0.1% of price 
+        // Set minimum TSL distance to prevent instant triggers - flat $10 minimum
+        const minTslDistance = 10; // $10 minimum (matches Frontend validation)
         if (tslDistance < minTslDistance) {
           res.status(400).json({
-            error: `Trailing Stop Loss distance too small. Minimum: $${minTslDistance.toFixed(2)} (0.1% of entry price $${fromInternalPrice(entryPrice).toFixed(2)}). You provided: $${tslDistance}`
+            error: `Trailing Stop Loss distance too small. Minimum: $${minTslDistance.toFixed(2)}. You provided: $${tslDistance}`
           });
           return;
         }
@@ -258,13 +257,12 @@ tradeRoutes.post(
 
       console.log(`[OPEN] User ${userId}: Deducted $${(marginInCents / 100).toFixed(2)} margin + $${(openFee / 100).toFixed(2)} fee (0.5%)`);
 
-      res.status(201).json({
-        message: "Order created successfully",
-        order: orderDetails,
-        fee: openFee, // Raw cents
-        feePercentage: 0.5,
-      });
-    }
+    res.status(201).json({
+      message: "Order created successfully",
+      order: orderDetails,
+      fee: openFee, // Raw cents
+      feePercentage: 0.5,
+    });
   }
 );
 
