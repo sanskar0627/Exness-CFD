@@ -217,4 +217,4 @@ All trading endpoints require JWT authentication via `Authorization: Bearer <tok
 
 ## License
 
-This project is private and proprietary By Sanskar Shukla.
+This project Made By Sanskar Shukla.
