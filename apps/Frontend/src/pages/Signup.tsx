@@ -56,15 +56,10 @@ export default function Signup() {
       setIsLoading(false);
       // Handle both 'error' and 'message' fields from backend
       const errorMessage = data.error || data.message || "Failed to create account";
-      setError(errorMessage);
-
-      // If user already exists, suggest signin
       if (errorMessage.toLowerCase().includes("already exists")) {
-        setTimeout(() => {
-          if (window.confirm("This email is already registered. Would you like to sign in instead?")) {
-            navigate("/signin");
-          }
-        }, 500);
+        setError("This email is already registered. Use the Sign in link below.");
+      } else {
+        setError(errorMessage);
       }
     }
   };

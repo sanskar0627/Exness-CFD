@@ -37,8 +37,45 @@ userRouter.post(
       }
       const exsistingUser = await prisma.user.findUnique({ where: { email } });
       if (exsistingUser) {
-        console.log(`[SIGNUP] User already exists: ${email}`);
-        res.status(409).json({ error: "User already exists" });
+        // A registered-but-NEVER-verified email/password account doesn't own
+        // the email yet — let the person sign up again: reset the password,
+        // issue a fresh code, and resend the verification email.
+        const canRetake =
+          !exsistingUser.emailVerified && !exsistingUser.provider;
+
+        if (!canRetake) {
+          console.log(`[SIGNUP] User already exists: ${email}`);
+          res.status(409).json({ error: "User already exists" });
+          return;
+        }
+
+        console.log(`[SIGNUP] Re-signup for unverified account: ${email}`);
+        const retakeHashed = hashPassword(password);
+        const retakeCode = generateVerificationCode();
+        const retakeExpiry = new Date(Date.now() + 15 * 60 * 1000);
+        const retakeEmailEnabled = isEmailConfigured();
+
+        await prisma.user.update({
+          where: { email },
+          data: {
+            password: retakeHashed,
+            emailVerified: !retakeEmailEnabled,
+            verificationCode: retakeEmailEnabled ? retakeCode : null,
+            verificationExpiry: retakeEmailEnabled ? retakeExpiry : null,
+          },
+        });
+
+        if (retakeEmailEnabled) {
+          sendVerificationEmail(email, retakeCode);
+        }
+
+        const retakeToken = generateToken(exsistingUser.userId);
+        res.status(201).json({
+          message: "User created successfully",
+          userId: exsistingUser.userId,
+          token: retakeToken,
+          needsVerification: retakeEmailEnabled,
+        });
         return;
       }
       //if its a valid gmail then genarting a vlaid uuid
