@@ -59,7 +59,10 @@ export default function Trading() {
 
   // WebSocket connection for order notifications
   useEffect(() => {
-    const WS_URL = import.meta.env.VITE_WS_URL || "ws://localhost:8080";
+    const WS_URL =
+      import.meta.env.VITE_WS_URL ||
+      import.meta.env.VITE_WEBSOCKET_URL ||
+      "ws://localhost:8080";
     const token = localStorage.getItem("token");
 
     if (!token) {

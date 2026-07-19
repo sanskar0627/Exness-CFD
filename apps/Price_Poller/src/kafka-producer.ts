@@ -75,7 +75,7 @@ export async function kafkaproduce() {
         };
         // CRITICAL FIX: Add explicit timeout and acks to prevent negative timeout warning
         await producer.send({
-          topic: "trades",
+          topic: process.env.KAFKA_TOPIC || "trades",
           timeout: 30000, // Explicit 30s timeout
           acks: 1, // Wait for leader acknowledgment only (not all replicas)
           compression: 1, // GZIP compression (optional performance boost)

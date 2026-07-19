@@ -30,7 +30,7 @@ const kafka = new Kafka({
 
 // CRITICAL FIX: Configure consumer with proper timeouts to prevent negative timeout bug
 const consumer = kafka.consumer({
-  groupId: "exness_consumer_group",
+  groupId: process.env.KAFKA_GROUP_ID || "exness_consumer_group",
   sessionTimeout: 60000, // Increased to 60s
   heartbeatInterval: 3000, // Explicitly set to 3s
   // IMPORTANT: These settings prevent timeout calculation errors
@@ -78,11 +78,12 @@ export async function consumer_gr() {
     isConnected = true;
     console.log("✓ Kafka Consumer connected successfully");
 
+    const kafkaTopic = process.env.KAFKA_TOPIC || "trades";
     await consumer.subscribe({
-      topic: "trades",
+      topic: kafkaTopic,
       fromBeginning: false,
     });
-    console.log(" Subscribed to 'trades' topic");
+    console.log(` Subscribed to '${kafkaTopic}' topic`);
 
     await consumer.run({
       eachMessage: async ({ message }) => {

@@ -106,3 +106,7 @@ tmp/
 temp/
 .tmp/
 .cache/
+
+# private local docs - never commit
+DEPLOY.md
+DEPLOYMENT_REVIEW.md

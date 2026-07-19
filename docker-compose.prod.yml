@@ -1,0 +1,197 @@
+# Production compose — runs EVERYTHING in Docker, isolated from Poker LLM.
+# Usage:  docker compose -f docker-compose.prod.yml --env-file .env.prod -p exness-cfd up -d --build
+name: exness-cfd
+
+networks:
+  exness_net:
+    name: exness_net
+
+services:
+  postgres:
+    image: timescale/timescaledb:2.17.2-pg16
+    container_name: exness_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-exness_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env.prod}
+      POSTGRES_DB: ${POSTGRES_DB:-exness_trades}
+    ports:
+      - "127.0.0.1:5433:5432"   # host access only for debugging/backups
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks: [exness_net]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-exness_user} -d ${POSTGRES_DB:-exness_trades}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    logging: &default-logging
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  redis:
+    image: redis:7.2.7-alpine
+    container_name: exness_redis
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "127.0.0.1:6380:6379"   # host access only for debugging
+    networks: [exness_net]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    logging: *default-logging
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: exness_zookeeper
+    restart: unless-stopped
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 3000
+    # no host port — internal only
+    volumes:
+      - zookeeper_data:/var/lib/zookeeper/data
+      - zookeeper_logs:/var/lib/zookeeper/log
+    networks: [exness_net]
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "2181"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging: *default-logging
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: exness_kafka
+    restart: unless-stopped
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:29093:29092"   # host access only for debugging
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      # in-network listener (apps) + host listener (debugging from the VM)
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_HEAP_OPTS: "-Xmx256M -Xms256M"
+      KAFKA_OPTS: "-Djava.net.preferIPv4Stack=true"
+      KAFKA_ZOOKEEPER_SESSION_TIMEOUT_MS: 30000
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    networks: [exness_net]
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+    logging: *default-logging
+
+  backend:
+    build:
+      context: .
+      dockerfile: apps/Backend/Dockerfile
+    container_name: exness_backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-exness_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-exness_trades}
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env.prod}
+      TOKEN_EXPIRY: ${TOKEN_EXPIRY:-24h}
+      INITIAL_BALANCE_USD: ${INITIAL_BALANCE_USD:-5000}
+      CORS_ORIGINS: ${PUBLIC_ORIGIN}
+      FRONTEND_URL: ${PUBLIC_ORIGIN}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_CALLBACK_URL: ${PUBLIC_ORIGIN}/api/v2/auth/google/callback
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+      GITHUB_CALLBACK_URL: ${PUBLIC_ORIGIN}/api/v2/auth/github/callback
+    ports:
+      - "127.0.0.1:5001:5000"   # host access only for health checks
+    networks: [exness_net]
+    logging: *default-logging
+
+  websocket:
+    build:
+      context: .
+      dockerfile: apps/Websocket/Dockerfile
+    container_name: exness_websocket
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      WS_PORT: 8080
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET}
+    ports:
+      - "127.0.0.1:8081:8080"   # host access only for debugging
+    networks: [exness_net]
+    logging: *default-logging
+
+  price_poller:
+    build:
+      context: .
+      dockerfile: apps/Price_Poller/Dockerfile
+    container_name: exness_price_poller
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      REDIS_URL: redis://redis:6379
+      KAFKA_BROKERS: kafka:9092
+      KAFKA_TOPIC: ${KAFKA_TOPIC:-trades}
+      KAFKA_GROUP_ID: ${KAFKA_GROUP_ID:-exness_consumer_group}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-exness_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-exness_trades}
+    networks: [exness_net]
+    logging: *default-logging
+
+  frontend:
+    build:
+      context: .
+      dockerfile: apps/Frontend/Dockerfile
+      args:
+        VITE_API_URL: ${PUBLIC_ORIGIN}/api/v2
+        VITE_WS_URL: ${PUBLIC_WS_URL}
+        VITE_WEBSOCKET_URL: ${PUBLIC_WS_URL}
+    container_name: exness_frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+      - websocket
+    ports:
+      # Public while testing via IP; set WEB_BIND=127.0.0.1 once host nginx + domain are in front
+      - "${WEB_BIND:-0.0.0.0}:${WEB_PORT:-8088}:80"
+    networks: [exness_net]
+    logging: *default-logging
+
+volumes:
+  postgres_data:
+  zookeeper_data:
+  zookeeper_logs:
+  kafka_data:

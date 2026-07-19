@@ -12,7 +12,8 @@ const redis = createClient({
   url: process.env.REDIS_URL || "redis://localhost:6379",
 });
 
-const wss = new WebSocketServer({ port: 8080 });
+const WS_PORT = Number(process.env.WS_PORT) || 8080;
+const wss = new WebSocketServer({ port: WS_PORT });
 const SubsManager = new SubscriptionManager();
 let isShuttingDown = false;
 
@@ -64,7 +65,7 @@ async function WS() {
         console.error("Error Occurred in WebSocket", err);
       });
     });
-    console.log("Websocket is listening on port 8080 Readyyyyy");
+    console.log(`Websocket is listening on port ${WS_PORT} Readyyyyy`);
   } catch (err) {
     console.error("Error setting up WebSocket server:", err);
   }

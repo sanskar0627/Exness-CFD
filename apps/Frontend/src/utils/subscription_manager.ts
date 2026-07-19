@@ -1,6 +1,9 @@
 import type { Trade } from "../components/AskBidsTable";
 
-const url = import.meta.env.VITE_WEBSOCKET_URL || "ws://localhost:8080";
+const url =
+  import.meta.env.VITE_WEBSOCKET_URL ||
+  import.meta.env.VITE_WS_URL ||
+  "ws://localhost:8080";
 
 export class Signalingmanager {
   private ws: WebSocket;
