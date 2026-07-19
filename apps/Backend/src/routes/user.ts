@@ -10,6 +10,11 @@ import type { SignupRequest, SigninRequest } from "../types";
 import { signupSchema, signinSchema } from "../types";
 import { fromInternalUSD } from "shared";
 import { prisma, Prisma } from "database";
+import {
+  generateVerificationCode,
+  sendVerificationEmail,
+  isEmailConfigured,
+} from "../services/emailService";
 
 const UUID_NAMESPACE = "6ba7b810-9dad-11d1-80b4-00c04fd430c8";
 export const userRouter = Router(); // To organise ROutes
@@ -42,21 +47,37 @@ userRouter.post(
 
       // Hash password before storing
       const hashedPassword = hashPassword(password);
+
+      // Email verification: 4-digit code, 15 minute expiry.
+      // If email sending isn't configured, auto-verify so signups still work.
+      const emailEnabled = isEmailConfigured();
+      const code = generateVerificationCode();
+      const expiry = new Date(Date.now() + 15 * 60 * 1000);
+
       await prisma.user.create({
         data: {
           userId: UserId,
           email: email,
           password: hashedPassword,
           balanceCents: 500000,
+          emailVerified: !emailEnabled,
+          verificationCode: emailEnabled ? code : null,
+          verificationExpiry: emailEnabled ? expiry : null,
         },
       });
       const newUser = CreateUser(UserId, email, hashedPassword);
       const newToken = generateToken(UserId);
 
+      if (emailEnabled) {
+        // Fire-and-forget; failures are logged inside the service
+        sendVerificationEmail(email, code);
+      }
+
       res.status(201).json({
         message: "User created successfully",
         userId: newUser.userId,
         token: newToken,
+        needsVerification: emailEnabled,
       });
       console.log(`[SIGNUP] User created successfully: ${email}`);
     } catch (err) {
@@ -115,6 +136,7 @@ userRouter.post("/signin", authRateLimit, async (req: Request, res: Response): P
       message: "Login successful",
       userId: user.userId,
       token: token,
+      needsVerification: !user.emailVerified,
     });
     console.log(`[SIGNIN] Login successful: ${email}`);
   } catch (err) {
@@ -122,6 +144,100 @@ userRouter.post("/signin", authRateLimit, async (req: Request, res: Response): P
     res.status(500).json({ error: "Internal server error in signin" });
   }
 });
+
+// Verify email with the 4-digit code
+userRouter.post(
+  "/verify-email",
+  authRateLimit,
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { email, code } = req.body as { email?: string; code?: string };
+      if (!email || !code || !/^\d{4}$/.test(String(code))) {
+        res.status(400).json({ error: "Email and 4-digit code required" });
+        return;
+      }
+
+      const user = await prisma.user.findUnique({ where: { email } });
+      if (!user) {
+        res.status(404).json({ error: "User not found" });
+        return;
+      }
+      if (user.emailVerified) {
+        res.status(200).json({ message: "Email already verified" });
+        return;
+      }
+      if (!user.verificationCode || !user.verificationExpiry) {
+        res.status(400).json({ error: "No verification pending. Request a new code." });
+        return;
+      }
+      if (user.verificationExpiry < new Date()) {
+        res.status(410).json({ error: "Code expired. Request a new code." });
+        return;
+      }
+      if (user.verificationCode !== String(code)) {
+        console.log(`[VERIFY] Wrong code attempt for ${email}`);
+        res.status(401).json({ error: "Incorrect code" });
+        return;
+      }
+
+      await prisma.user.update({
+        where: { email },
+        data: {
+          emailVerified: true,
+          verificationCode: null,
+          verificationExpiry: null,
+        },
+      });
+
+      console.log(`[VERIFY] Email verified: ${email}`);
+      res.status(200).json({ message: "Email verified successfully" });
+    } catch (err) {
+      console.error("[VERIFY] Error", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  }
+);
+
+// Resend a fresh verification code
+userRouter.post(
+  "/resend-code",
+  authRateLimit,
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { email } = req.body as { email?: string };
+      if (!email) {
+        res.status(400).json({ error: "Email required" });
+        return;
+      }
+      const user = await prisma.user.findUnique({ where: { email } });
+      if (!user) {
+        res.status(404).json({ error: "User not found" });
+        return;
+      }
+      if (user.emailVerified) {
+        res.status(200).json({ message: "Email already verified" });
+        return;
+      }
+
+      const code = generateVerificationCode();
+      const expiry = new Date(Date.now() + 15 * 60 * 1000);
+      await prisma.user.update({
+        where: { email },
+        data: { verificationCode: code, verificationExpiry: expiry },
+      });
+
+      const sent = await sendVerificationEmail(email, code);
+      if (!sent) {
+        res.status(502).json({ error: "Failed to send email. Try again later." });
+        return;
+      }
+      res.status(200).json({ message: "New code sent" });
+    } catch (err) {
+      console.error("[RESEND] Error", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  }
+);
 
 userRouter.get(
   "/balance",

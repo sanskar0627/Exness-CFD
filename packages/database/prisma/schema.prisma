@@ -38,6 +38,10 @@ model User {
   emailVerified Boolean  @default(false)
   avatarUrl     String?  // Profile picture from OAuth
 
+  // Email verification (4-digit code sent via Resend)
+  verificationCode   String?
+  verificationExpiry DateTime?
+
   @@index([provider, providerId])
   @@map("users")
 }

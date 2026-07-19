@@ -53,7 +53,12 @@ export default function Signin() {
       // Store both userId and token for authentication
       localStorage.setItem("userID", data.userId);
       localStorage.setItem("token", data.token);
-      navigate("/trading");
+      if (data.needsVerification) {
+        localStorage.setItem("pendingEmail", email as string);
+        navigate("/verify");
+      } else {
+        navigate("/trading");
+      }
       setIsSubmitted(false);
       setIsLoading(false);
     } else {

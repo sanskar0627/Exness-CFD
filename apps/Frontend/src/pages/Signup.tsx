@@ -42,8 +42,13 @@ export default function Signup() {
       // Auto-login: Store both userId and token
       localStorage.setItem("userID", data.userId);
       localStorage.setItem("token", data.token);
-      // Redirect directly to trading page
-      navigate("/trading");
+      if (data.needsVerification) {
+        // Email verification required before trading
+        localStorage.setItem("pendingEmail", email as string);
+        navigate("/verify");
+      } else {
+        navigate("/trading");
+      }
       setIsSubmitted(false);
       setIsLoading(false);
     } else {

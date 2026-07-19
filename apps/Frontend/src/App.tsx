@@ -3,6 +3,7 @@ import Signin from "./pages/Singin";
 import Signup from "./pages/Signup";
 import Trading from "./pages/Trading";
 import AuthCallback from "./pages/AuthCallback";
+import VerifyEmail from "./pages/VerifyEmail";
 import "aos/dist/aos.css";
 import ExnessLanding from "./pages/Homepage";
 
@@ -16,6 +17,7 @@ function App() {
           <Route path="/signup" element={<Signup />} />
           <Route path="/trading" element={<Trading />} />
           <Route path="/auth/callback" element={<AuthCallback />} />
+          <Route path="/verify" element={<VerifyEmail />} />
         </Routes>
       </BrowserRouter>
     </div>

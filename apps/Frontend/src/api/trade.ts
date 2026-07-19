@@ -95,6 +95,38 @@ export async function submitsignin(email: string, pass: string) {
   }
 }
 
+export async function verifyEmailCode(email: string, code: string) {
+  try {
+    const res = await axios.post(
+      `${BASE_URL}/user/verify-email`,
+      { email, code },
+      { withCredentials: true },
+    );
+    return res.data;
+  } catch (e) {
+    if (axios.isAxiosError(e)) {
+      return e.response?.data || { error: "Verification failed" };
+    }
+    return { error: (e as Error).message };
+  }
+}
+
+export async function resendVerificationCode(email: string) {
+  try {
+    const res = await axios.post(
+      `${BASE_URL}/user/resend-code`,
+      { email },
+      { withCredentials: true },
+    );
+    return res.data;
+  } catch (e) {
+    if (axios.isAxiosError(e)) {
+      return e.response?.data || { error: "Failed to resend code" };
+    }
+    return { error: (e as Error).message };
+  }
+}
+
 export async function findUserAmount() {
   try {
     const token = localStorage.getItem("token");

@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { Request, Response } from "express";
 import { authMiddleware } from "../middleware/auth";
+import { requireVerified } from "../middleware/verified";
 import { tradeOpenRateLimit, tradeCloseRateLimit, apiRateLimit } from "../middleware/rateLimit";
 import { openTradeSchema, FEE_PERCENTAGE } from "../types";
 import { findUSerId } from "../data/store";
@@ -23,6 +24,7 @@ tradeRoutes.post(
   "/open",
   tradeOpenRateLimit,
   authMiddleware,
+  requireVerified,
   async (req: Request, res: Response): Promise<void> => {
     // Validate the ENTIRE request body (including optional fields like takeProfit, stopLoss, trailingStopLoss)
     const validation = openTradeSchema.safeParse(req.body);
