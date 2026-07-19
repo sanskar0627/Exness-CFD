@@ -1,6 +1,8 @@
 import {
   createChart,
   ColorType,
+  CrosshairMode,
+  LineStyle,
   CandlestickSeries,
   type IChartApi,
   type CandlestickData,
@@ -24,6 +26,16 @@ import {
 } from "../utils/chart_agg_ws_api";
 import type { Trade } from "./AskBidsTable";
 
+// Binance-style palette
+const UP_COLOR = "#0ECB81";
+const DOWN_COLOR = "#F6465D";
+const GRID_COLOR = "rgba(43, 49, 57, 0.6)";
+const BORDER_COLOR = "#2B3139";
+const TEXT_COLOR = "#B7BDC6";
+const CROSSHAIR_COLOR = "#758696";
+
+type Candle = CandlestickData<Time>;
+
 export default function ChartComponent({
   duration,
   symbol,
@@ -34,6 +46,7 @@ export default function ChartComponent({
   onPriceUpdate?: (prices: { bidPrice: number; askPrice: number }) => void;
 }) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
+  const legendRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const [tooltip, setTooltip] = useState<string | null>(null);
   const [tooltipVisible, setTooltipVisible] = useState<boolean>(false);
@@ -44,9 +57,19 @@ export default function ChartComponent({
   const userScrolledRef = useRef<boolean>(false);
   const lastCandleTimeRef = useRef<number>(0);
 
+  // Refs that mirror props/state so the realtime tick handler always sees the
+  // CURRENT value without re-creating the whole chart (prevents stale closures
+  // and unnecessary chart teardowns on parent re-renders).
+  const followModeRef = useRef<boolean>(true);
+  const onPriceUpdateRef = useRef(onPriceUpdate);
+
   useEffect(() => {
-    // Symbol changed - component will re-render with new chart
-  }, [symbol]);
+    followModeRef.current = followMode;
+  }, [followMode]);
+
+  useEffect(() => {
+    onPriceUpdateRef.current = onPriceUpdate;
+  }, [onPriceUpdate]);
 
   useEffect(() => {
     if (tooltip) {
@@ -69,8 +92,6 @@ export default function ChartComponent({
   useEffect(() => {
     if (!chartContainerRef.current || !symbol) return;
 
-    // Creating new chart for symbol and duration
-
     let candlestickSeries: ISeriesApi<
       "Candlestick",
       Time,
@@ -82,30 +103,133 @@ export default function ChartComponent({
     let unwatch: (() => void) | null = null;
     let isCleanedUp = false;
 
+    // requestAnimationFrame batching: no matter how many ticks arrive
+    // (sub-20ms stream), we paint at most once per display frame.
+    let pendingCandle: Candle | null = null;
+    let rafId: number | null = null;
+
+    // Legend state (updated via direct DOM writes — zero React re-renders)
+    let latestCandle: Candle | null = null;
+    let isHoveringLegend = false;
+
+    // Single reusable timer for the "user scrolled, pause auto-follow" window
+    let userScrollTimer: number | null = null;
+
+    const container = chartContainerRef.current;
+
+    const formatLegend = (c: Candle) => {
+      const up = c.close >= c.open;
+      const color = up ? UP_COLOR : DOWN_COLOR;
+      const chg = c.open !== 0 ? ((c.close - c.open) / c.open) * 100 : 0;
+      const f = (n: number) =>
+        n.toLocaleString("en-US", {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        });
+      return (
+        `<span style="color:${TEXT_COLOR}">O</span> <span style="color:${color}">${f(c.open)}</span> ` +
+        `<span style="color:${TEXT_COLOR}">H</span> <span style="color:${color}">${f(c.high)}</span> ` +
+        `<span style="color:${TEXT_COLOR}">L</span> <span style="color:${color}">${f(c.low)}</span> ` +
+        `<span style="color:${TEXT_COLOR}">C</span> <span style="color:${color}">${f(c.close)}</span> ` +
+        `<span style="color:${color}">${chg >= 0 ? "+" : ""}${chg.toFixed(2)}%</span>`
+      );
+    };
+
+    const updateLegend = (c: Candle | null) => {
+      if (legendRef.current && c) {
+        legendRef.current.innerHTML = formatLegend(c);
+      }
+    };
+
+    const flushFrame = () => {
+      rafId = null;
+      if (isCleanedUp || !pendingCandle || !candlestickSeries) return;
+      const candle = pendingCandle;
+      pendingCandle = null;
+
+      candlestickSeries.update(candle);
+      latestCandle = candle;
+      if (!isHoveringLegend) updateLegend(candle);
+
+      // Follow Mode: auto-scroll on NEW candle only (same behavior as before,
+      // but reads the live ref so toggling actually takes effect immediately)
+      if (followModeRef.current && !userScrolledRef.current && chart) {
+        if (candle.time !== lastCandleTimeRef.current) {
+          lastCandleTimeRef.current = candle.time as number;
+          chart.timeScale().scrollToRealTime();
+        }
+      }
+    };
+
+    const markUserInteraction = () => {
+      if (!followModeRef.current) return;
+      userScrolledRef.current = true;
+      if (userScrollTimer) clearTimeout(userScrollTimer);
+      userScrollTimer = window.setTimeout(() => {
+        userScrolledRef.current = false;
+      }, 3000);
+    };
+
     const initChart = async () => {
       try {
         setLoading(true);
         setError(null);
 
-        chart = createChart(chartContainerRef.current!, {
+        chart = createChart(container, {
           layout: {
-            background: {
-              type: ColorType.VerticalGradient,
-              topColor: "#141D22",
-              bottomColor: "#141D22",
-            },
-            textColor: "#FFFFFF",
+            background: { type: ColorType.Solid, color: "#141D22" },
+            textColor: TEXT_COLOR,
+            fontSize: 11,
+            fontFamily:
+              "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif",
+            attributionLogo: false,
           },
-          width: chartContainerRef.current!.clientWidth,
-          height: chartContainerRef.current!.clientHeight,
+          width: container.clientWidth,
+          height: container.clientHeight,
+          grid: {
+            vertLines: { color: GRID_COLOR, style: LineStyle.Solid },
+            horzLines: { color: GRID_COLOR, style: LineStyle.Solid },
+          },
+          crosshair: {
+            mode: CrosshairMode.Normal,
+            vertLine: {
+              color: CROSSHAIR_COLOR,
+              width: 1,
+              style: LineStyle.Dashed,
+              labelBackgroundColor: BORDER_COLOR,
+            },
+            horzLine: {
+              color: CROSSHAIR_COLOR,
+              width: 1,
+              style: LineStyle.Dashed,
+              labelBackgroundColor: BORDER_COLOR,
+            },
+          },
+          rightPriceScale: {
+            borderColor: BORDER_COLOR,
+            scaleMargins: { top: 0.1, bottom: 0.08 },
+            entireTextOnly: true,
+          },
           timeScale: {
+            borderColor: BORDER_COLOR,
             timeVisible: true,
             secondsVisible: false,
-            // Increase bar spacing for bigger candles
-            barSpacing: 12,  // Default is 6, higher = wider candles
-            minBarSpacing: 8,  // Minimum spacing when zoomed out
-            // Prevent excessive zoom out
-            rightOffset: 12,  // Space on right side for latest candle
+            barSpacing: 9,
+            minBarSpacing: 1, // allow deep zoom-out like Binance
+            rightOffset: 6,
+          },
+          // Smooth, momentum-based pan on both mouse and touch
+          kineticScroll: { mouse: true, touch: true },
+          handleScroll: {
+            mouseWheel: true,
+            pressedMouseMove: true,
+            horzTouchDrag: true,
+            vertTouchDrag: false,
+          },
+          handleScale: {
+            mouseWheel: true,
+            pinch: true,
+            axisPressedMouseMove: true,
           },
           localization: {
             timeFormatter: (timestamp: any) => {
@@ -118,38 +242,41 @@ export default function ChartComponent({
         });
 
         candlestickSeries = chart.addSeries(CandlestickSeries, {
-          upColor: "#158BF9",
-          downColor: "#EB483F",
+          upColor: UP_COLOR,
+          downColor: DOWN_COLOR,
           borderVisible: false,
-          wickUpColor: "#158BF9",
-          wickDownColor: "#EB483F",
+          wickUpColor: UP_COLOR,
+          wickDownColor: DOWN_COLOR,
+          priceLineVisible: true,
+          priceLineStyle: LineStyle.Dashed,
+          priceLineWidth: 1,
+          lastValueVisible: true,
         });
 
         const tickWrapper = (trade: Trade) => {
-          // Check if component has been cleaned up
-          if (isCleanedUp) {
+          if (isCleanedUp) return;
+
+          // Guard: only process ticks for the chart's current symbol
+          if (!trade.symbol || trade.symbol !== symbol) return;
+
+          if (
+            !trade.bidPrice ||
+            !trade.askPrice ||
+            isNaN(trade.bidPrice) ||
+            isNaN(trade.askPrice)
+          ) {
             return;
           }
 
-          // CRITICAL: Check if this trade is for the current symbol FIRST
-          // This prevents BTC prices from showing on ETH/SOL charts during symbol switches
-          if (!trade.symbol || trade.symbol !== symbol) {
-            return;
-          }
-
-          // Check for valid price data
-          if (!trade.bidPrice || !trade.askPrice || isNaN(trade.bidPrice) || isNaN(trade.askPrice)) {
-            console.warn(`[CHART] Invalid price data for ${symbol}:`, trade);
-            return;
-          }
-
-          // Only update prices AFTER confirming correct symbol
-          const prices = {
-            bidPrice: trade.bidPrice || 0,
-            askPrice: trade.askPrice || 0,
-          };
-          if (onPriceUpdate && prices.bidPrice > 0 && prices.askPrice > 0) {
-            onPriceUpdate(prices);
+          if (
+            onPriceUpdateRef.current &&
+            trade.bidPrice > 0 &&
+            trade.askPrice > 0
+          ) {
+            onPriceUpdateRef.current({
+              bidPrice: trade.bidPrice,
+              askPrice: trade.askPrice,
+            });
           }
 
           const tick: RealtimeUpdate = {
@@ -160,89 +287,79 @@ export default function ChartComponent({
           };
 
           const candle = processRealupdate(tick, duration);
-
-          if (candle && candlestickSeries) {
-            candlestickSeries.update(candle);
-            
-            // Auto-scroll to latest candle if Follow Mode is enabled
-            if (followMode && !userScrolledRef.current && chart) {
-              // Only scroll if this is a new candle (time changed)
-              if (candle.time !== lastCandleTimeRef.current) {
-                lastCandleTimeRef.current = candle.time as number;
-                // Scroll to show the latest candle with some padding
-                setTimeout(() => {
-                  if (chart) {
-                    chart.timeScale().scrollToRealTime();
-                  }
-                }, 50);
-              }
+          if (candle) {
+            // Coalesce: keep only the newest candle state per animation frame
+            pendingCandle = candle as Candle;
+            if (rafId === null) {
+              rafId = requestAnimationFrame(flushFrame);
             }
-          } else {
-            console.warn(`[CHART] Failed to update candle - candle:`, candle, 'series:', !!candlestickSeries);
           }
         };
 
         const rawData = await getChartData(symbol, duration);
-
-        // Check if component was cleaned up during async operation
         if (isCleanedUp) return;
 
         if (candlestickSeries) {
-          // CRITICAL FIX: Clear old symbol data first to prevent flash
-          candlestickSeries.setData([]);
-          // Then set new symbol data
           candlestickSeries.setData(rawData);
+          if (rawData.length > 0) {
+            latestCandle = rawData[rawData.length - 1] as Candle;
+            updateLegend(latestCandle);
+          }
         }
+
         if (chart) {
-          // Set intelligent initial zoom based on duration
-          // Instead of fitContent() which shows ALL data (making candles tiny),
-          // we show a reasonable number of recent candles for better visibility
+          // Initial zoom: show a sensible window of recent candles
           const dataLength = rawData.length;
           if (dataLength > 0) {
-            // Determine how many candles to show based on chart duration
             let visibleCandles;
             switch (duration) {
               case Duration.candles_1m:
-                visibleCandles = 60;  // Show last 1 hour (60 minutes)
+                visibleCandles = 60;
                 break;
               case Duration.candles_1d:
-                visibleCandles = 30;  // Show last 30 days
+                visibleCandles = 30;
                 break;
               case Duration.candles_1w:
-                visibleCandles = 20;  // Show last 20 weeks (~5 months)
+                visibleCandles = 20;
                 break;
               default:
                 visibleCandles = 60;
             }
-
-            // Set visible range to show only the most recent candles
-            const from = Math.max(0, dataLength - visibleCandles);
-            const to = dataLength - 1;
-            
             chart.timeScale().setVisibleLogicalRange({
-              from: from,
-              to: to,
+              from: Math.max(0, dataLength - visibleCandles),
+              to: dataLength - 1 + 6, // include right offset breathing room
             });
-            
-            console.log(`[CHART] Initial zoom: showing ${visibleCandles} most recent candles (${from} to ${to} of ${dataLength})`);
           } else {
-            // Fallback if no data
             chart.timeScale().fitContent();
           }
-          
-          // Track user scrolling to disable auto-scroll temporarily
-          chart.timeScale().subscribeVisibleLogicalRangeChange(() => {
-            if (!followMode) return;
-            
-            // Mark that user has scrolled
-            userScrolledRef.current = true;
-            
-            // Reset after 3 seconds of no scrolling
-            setTimeout(() => {
-              userScrolledRef.current = false;
-            }, 3000);
+
+          // OHLC legend follows the crosshair (direct DOM writes, no re-renders)
+          chart.subscribeCrosshairMove((param) => {
+            if (isCleanedUp || !candlestickSeries || !legendRef.current) return;
+            if (param.time !== undefined) {
+              const data = param.seriesData.get(candlestickSeries) as
+                | Candle
+                | undefined;
+              if (data && "open" in data) {
+                isHoveringLegend = true;
+                updateLegend(data);
+                return;
+              }
+            }
+            isHoveringLegend = false;
+            updateLegend(latestCandle);
           });
         }
+
+        // Pause auto-follow only on REAL user input (wheel/drag/touch),
+        // not on programmatic scrolls — kills the old feedback loop.
+        container.addEventListener("wheel", markUserInteraction, {
+          passive: true,
+        });
+        container.addEventListener("mousedown", markUserInteraction);
+        container.addEventListener("touchstart", markUserInteraction, {
+          passive: true,
+        });
 
         const signalingManager = Signalingmanager.getInstance();
         unwatch = signalingManager.watch(symbol, tickWrapper);
@@ -250,43 +367,44 @@ export default function ChartComponent({
         chartRef.current = chart;
         setLoading(false);
       } catch (err) {
-        // Check if component was cleaned up during async operation
         if (isCleanedUp) return;
-
         console.error("Failed to load chart data:", err);
         setError("Failed to load chart data. Please try again.");
         setLoading(false);
       }
     };
 
-    const handleResize = () => {
-      if (chartContainerRef.current && chart) {
-        const parent = chartContainerRef.current;
-        chart.applyOptions({
-          width: parent.clientWidth,
-          height: parent.clientHeight,
-        });
-        chart.timeScale().fitContent();
+    // ResizeObserver: reacts to layout/panel changes too, and preserves the
+    // user's zoom level (the old handler reset zoom with fitContent()).
+    const resizeObserver = new ResizeObserver((entries) => {
+      if (!chart || isCleanedUp) return;
+      const entry = entries[0];
+      if (entry) {
+        const { width, height } = entry.contentRect;
+        if (width > 0 && height > 0) {
+          chart.applyOptions({ width, height });
+        }
       }
-    };
+    });
+    resizeObserver.observe(container);
 
     initChart();
 
-    setTimeout(handleResize, 100);
-
-    window.addEventListener("resize", handleResize);
-
     return () => {
-      // Mark as cleaned up IMMEDIATELY to stop all callbacks
       isCleanedUp = true;
 
-      // IMPORTANT: Unsubscribe FIRST to prevent stale data
       if (unwatch) {
         unwatch();
         unwatch = null;
       }
 
-      window.removeEventListener("resize", handleResize);
+      if (rafId !== null) cancelAnimationFrame(rafId);
+      if (userScrollTimer) clearTimeout(userScrollTimer);
+
+      resizeObserver.disconnect();
+      container.removeEventListener("wheel", markUserInteraction);
+      container.removeEventListener("mousedown", markUserInteraction);
+      container.removeEventListener("touchstart", markUserInteraction);
 
       resetLastCandle(symbol, duration);
 
@@ -301,7 +419,7 @@ export default function ChartComponent({
 
       candlestickSeries = null;
     };
-  }, [duration, symbol, onPriceUpdate]);
+  }, [duration, symbol]);
 
   return (
     <div className="text-neutral-50 h-full w-full relative">
@@ -496,6 +614,11 @@ export default function ChartComponent({
           </div>
         </div>
         <div className="flex-grow relative">
+          {/* OHLC legend (Binance-style) — updated via direct DOM, no re-renders */}
+          <div
+            ref={legendRef}
+            className="absolute top-2 left-3 z-20 text-[11px] font-mono tracking-tight pointer-events-none select-none"
+          />
           {loading && (
             <div className="absolute inset-0 flex items-center justify-center bg-neutral-900/50 backdrop-blur-sm z-10">
               <div className="flex flex-col items-center gap-3">
