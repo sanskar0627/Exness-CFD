@@ -167,6 +167,7 @@ services:
       KAFKA_BROKERS: kafka:9092
       KAFKA_TOPIC: ${KAFKA_TOPIC:-trades}
       KAFKA_GROUP_ID: ${KAFKA_GROUP_ID:-exness_consumer_group}
+      SPREAD_PERCENT: ${SPREAD_PERCENT:-0.05}
       DATABASE_URL: postgresql://${POSTGRES_USER:-exness_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-exness_trades}
     networks: [exness_net]
     logging: *default-logging

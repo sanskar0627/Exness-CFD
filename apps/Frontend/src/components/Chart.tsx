@@ -289,7 +289,10 @@ export default function ChartComponent({
           borderVisible: false,
           wickUpColor: UP_COLOR,
           wickDownColor: DOWN_COLOR,
-          priceLineVisible: false, // mid line replaced by explicit Buy/Sell lines
+          // Moving last-price line: tracks every tick on top of the live bar
+          priceLineVisible: true,
+          priceLineStyle: LineStyle.Dashed,
+          priceLineWidth: 1,
           lastValueVisible: true,
         });
 

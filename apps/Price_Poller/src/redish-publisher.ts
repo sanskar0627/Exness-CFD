@@ -27,9 +27,13 @@ export async function startRedis() {
     tradeListener = async (tradeData: Trades) => {
       try {
         // tradeData.price is already in internal format (scaled by 10000)
-        // Apply 0.5% spread: bid is 0.5% lower, ask is 0.5% higher
+        // Apply spread around mid: bid lower, ask higher.
+        // SPREAD_PERCENT env (default 0.05%) — realistic broker-style spread.
+        // NOTE: platform profit comes from the 0.5% margin fee (Backend),
+        // NOT from this price spread, so narrowing it doesn't cut revenue.
         const midPrice = tradeData.price;
-        const spreadAmount = Math.floor(midPrice * 0.005); // 0.5% spread
+        const spreadPercent = Number(process.env.SPREAD_PERCENT ?? "0.05") / 100;
+        const spreadAmount = Math.max(1, Math.floor(midPrice * spreadPercent));
         
         const redisPriceData: typeofredishPriceData = {
           symbol: tradeData.symbol.replace("USDT", ""),
