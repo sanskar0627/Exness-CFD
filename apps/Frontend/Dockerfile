@@ -7,7 +7,7 @@ COPY apps ./apps
 COPY packages ./packages
 COPY scripts ./scripts
 
-RUN bun install --frozen-lockfile
+RUN bun install
 
 # Vite envs are BUILD-time. Passed from docker-compose build args.
 ARG VITE_API_URL

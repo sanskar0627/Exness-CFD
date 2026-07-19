@@ -7,7 +7,7 @@ COPY apps ./apps
 COPY packages ./packages
 COPY scripts ./scripts
 
-RUN bun install --frozen-lockfile
+RUN bun install
 
 WORKDIR /app/apps/Websocket
 CMD ["bun", "src/index.ts"]

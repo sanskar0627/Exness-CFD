@@ -10,7 +10,7 @@ COPY apps ./apps
 COPY packages ./packages
 COPY scripts ./scripts
 
-RUN bun install --frozen-lockfile
+RUN bun install
 RUN bunx prisma generate --schema packages/database/prisma/schema.prisma
 
 WORKDIR /app/apps/Price_Poller
