@@ -9,11 +9,13 @@ import {
   type CandlestickSeriesOptions,
   type CandlestickStyleOptions,
   type DeepPartial,
+  type IPriceLine,
   type ISeriesApi,
   type SeriesOptionsCommon,
   type Time,
   type WhitespaceData,
 } from "lightweight-charts";
+import { toDisplayPrice } from "../utils/utils";
 import { useEffect, useRef, useState } from "react";
 import type { SYMBOL } from "../utils/constants";
 import { Duration } from "../utils/constants";
@@ -29,6 +31,8 @@ import type { Trade } from "./AskBidsTable";
 // Binance-style palette
 const UP_COLOR = "#0ECB81";
 const DOWN_COLOR = "#F6465D";
+const BUY_LINE_COLOR = "#158BF9"; // matches the Buy panel
+const SELL_LINE_COLOR = "#F6465D"; // matches the Sell panel
 const GRID_COLOR = "rgba(43, 49, 57, 0.6)";
 const BORDER_COLOR = "#2B3139";
 const TEXT_COLOR = "#B7BDC6";
@@ -106,7 +110,13 @@ export default function ChartComponent({
     // requestAnimationFrame batching: no matter how many ticks arrive
     // (sub-20ms stream), we paint at most once per display frame.
     let pendingCandle: Candle | null = null;
+    let pendingBid: number | null = null;
+    let pendingAsk: number | null = null;
     let rafId: number | null = null;
+
+    // Live Buy/Sell price lines — show the EXACT same numbers as Market Data
+    let buyLine: IPriceLine | null = null;
+    let sellLine: IPriceLine | null = null;
 
     // Legend state (updated via direct DOM writes — zero React re-renders)
     let latestCandle: Candle | null = null;
@@ -143,7 +153,19 @@ export default function ChartComponent({
 
     const flushFrame = () => {
       rafId = null;
-      if (isCleanedUp || !pendingCandle || !candlestickSeries) return;
+      if (isCleanedUp || !candlestickSeries) return;
+
+      // Update live Buy/Sell lines so the chart shows the exact panel prices
+      if (pendingBid !== null && sellLine) {
+        sellLine.applyOptions({ price: pendingBid });
+        pendingBid = null;
+      }
+      if (pendingAsk !== null && buyLine) {
+        buyLine.applyOptions({ price: pendingAsk });
+        pendingAsk = null;
+      }
+
+      if (!pendingCandle) return;
       const candle = pendingCandle;
       pendingCandle = null;
 
@@ -160,6 +182,26 @@ export default function ChartComponent({
         }
       }
     };
+
+    const scheduleFlush = () => {
+      // rAF doesn't fire in hidden/throttled tabs — flush synchronously there
+      // so the chart never falls behind the live price.
+      if (document.hidden) {
+        flushFrame();
+        return;
+      }
+      if (rafId === null) {
+        rafId = requestAnimationFrame(flushFrame);
+      }
+    };
+
+    const onVisibilityChange = () => {
+      if (!document.hidden) {
+        // Tab became visible again — paint whatever accumulated immediately
+        flushFrame();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
 
     const markUserInteraction = () => {
       if (!followModeRef.current) return;
@@ -247,10 +289,27 @@ export default function ChartComponent({
           borderVisible: false,
           wickUpColor: UP_COLOR,
           wickDownColor: DOWN_COLOR,
-          priceLineVisible: true,
-          priceLineStyle: LineStyle.Dashed,
-          priceLineWidth: 1,
+          priceLineVisible: false, // mid line replaced by explicit Buy/Sell lines
           lastValueVisible: true,
+        });
+
+        // Live Buy (ask) and Sell (bid) lines — same values as the Market
+        // Data panel, updated every frame.
+        buyLine = candlestickSeries.createPriceLine({
+          price: 0,
+          color: BUY_LINE_COLOR,
+          lineWidth: 1,
+          lineStyle: LineStyle.Dashed,
+          axisLabelVisible: true,
+          title: "Buy",
+        });
+        sellLine = candlestickSeries.createPriceLine({
+          price: 0,
+          color: SELL_LINE_COLOR,
+          lineWidth: 1,
+          lineStyle: LineStyle.Dashed,
+          axisLabelVisible: true,
+          title: "Sell",
         });
 
         const tickWrapper = (trade: Trade) => {
@@ -287,13 +346,13 @@ export default function ChartComponent({
           };
 
           const candle = processRealupdate(tick, duration);
+          // Coalesce: keep only the newest state per animation frame
+          pendingBid = toDisplayPrice(trade.bidPrice);
+          pendingAsk = toDisplayPrice(trade.askPrice);
           if (candle) {
-            // Coalesce: keep only the newest candle state per animation frame
             pendingCandle = candle as Candle;
-            if (rafId === null) {
-              rafId = requestAnimationFrame(flushFrame);
-            }
           }
+          scheduleFlush();
         };
 
         const rawData = await getChartData(symbol, duration);
@@ -401,7 +460,10 @@ export default function ChartComponent({
       if (rafId !== null) cancelAnimationFrame(rafId);
       if (userScrollTimer) clearTimeout(userScrollTimer);
 
+      document.removeEventListener("visibilitychange", onVisibilityChange);
       resizeObserver.disconnect();
+      buyLine = null;
+      sellLine = null;
       container.removeEventListener("wheel", markUserInteraction);
       container.removeEventListener("mousedown", markUserInteraction);
       container.removeEventListener("touchstart", markUserInteraction);
