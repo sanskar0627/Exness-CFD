@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /trading
+Disallow: /verify
+Disallow: /auth/
+
+Sitemap: https://exness.sanskarshukla.com/sitemap.xml
