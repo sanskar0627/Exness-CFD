@@ -4,4 +4,4 @@ Disallow: /trading
 Disallow: /verify
 Disallow: /auth/
 
-Sitemap: https://exness.sanskarshukla.com/sitemap.xml
+Sitemap: https://paperpip.sanskarshukla.com/sitemap.xml

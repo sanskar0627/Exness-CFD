@@ -5,14 +5,14 @@ import Trading from "./pages/Trading";
 import AuthCallback from "./pages/AuthCallback";
 import VerifyEmail from "./pages/VerifyEmail";
 import "aos/dist/aos.css";
-import ExnessLanding from "./pages/Homepage";
+import LandingPage from "./pages/Homepage";
 
 function App() {
   return (
     <div className="min-h-screen bg-[#0c1418] text-white">
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<ExnessLanding />} />
+          <Route path="/" element={<LandingPage />} />
           <Route path="/signin" element={<Signin />} />
           <Route path="/signup" element={<Signup />} />
           <Route path="/trading" element={<Trading />} />

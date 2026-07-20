@@ -95,7 +95,7 @@ export default function Signup() {
               <h1 className="text-3xl font-bold text-neutral-50 mb-2">
                 Create Account
               </h1>
-              <p className="text-neutral-300">Join Exness today</p>
+              <p className="text-neutral-300">Join PaperPip today</p>
             </div>
 
             <div className="px-8 pb-8 space-y-6">

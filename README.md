@@ -1,6 +1,6 @@
-# Exness CFD Trading Platform
+# PaperPip — Real-Time Crypto Paper Trading Platform
 
-**🔴 Live: [exness.sanskarshukla.com](https://exness.sanskarshukla.com)** — sign up free and trade with a $5,000 virtual balance.
+**🔴 Live: [paperpip.sanskarshukla.com](https://paperpip.sanskarshukla.com)** — sign up free and practice trading with a $5,000 virtual balance.
 
 A TypeScript-based real-time CFD (Contract for Difference) trading platform supporting Bitcoin, Ethereum, and Solana with leveraged positions up to 100x. Built as a monorepo with event-driven architecture for sub-20ms price updates from Binance to client. Deployed in production on a self-managed VPS with Docker, Caddy (auto-TLS), email verification via Resend, Google/GitHub OAuth, TimescaleDB retention policies, and a self-healing data pipeline.
 

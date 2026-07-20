@@ -127,7 +127,7 @@ services:
       GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
       GITHUB_CALLBACK_URL: ${PUBLIC_ORIGIN}/api/v2/auth/github/callback
       RESEND_API_KEY: ${RESEND_API_KEY:-}
-      EMAIL_FROM: "${EMAIL_FROM:-Exness CFD <verify@sanskarshukla.com>}"
+      EMAIL_FROM: "${EMAIL_FROM:-PaperPip <verify@sanskarshukla.com>}"
     ports:
       - "127.0.0.1:5001:5000"   # host access only for health checks
     networks: [exness_net]

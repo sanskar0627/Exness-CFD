@@ -38,9 +38,9 @@ export default function PersonalDashboard() {
       <nav className="relative z-10 flex items-center justify-between p-6 max-w-7xl mx-auto">
         <div className="flex items-center space-x-2">
           <div className="w-8 h-8 bg-neutral-500 flex items-center justify-center">
-            <span className="text-neutral-50 font-bold text-sm">E</span>
+            <span className="text-neutral-50 font-bold text-sm">P</span>
           </div>
-          <span className="text-neutral-50 font-bold text-xl">Exness</span>
+          <span className="text-neutral-50 font-bold text-xl">PaperPip</span>
         </div>
 
         <div className="hidden md:flex items-center space-x-8">
@@ -86,7 +86,7 @@ export default function PersonalDashboard() {
             </h1>
 
             <p className="text-neutral-300 text-lg mb-8 max-w-lg">
-              Experience next-generation trading with our comprehensive Exness
+              Experience next-generation trading with our comprehensive PaperPip
               platform. Real-time market data, advanced analytics, and intuitive
               portfolio management in one place.
             </p>
@@ -228,7 +228,7 @@ export default function PersonalDashboard() {
       <div className="relative z-10 max-w-7xl mx-auto px-6 py-20">
         <div className="text-center mb-16">
           <h2 className="text-4xl lg:text-5xl font-bold text-neutral-50 mb-4">
-            Our Exness Platform Handles
+            Our PaperPip Platform Handles
             <br />
             Millions of Trades Daily
           </h2>
@@ -384,10 +384,10 @@ export default function PersonalDashboard() {
       <div className="relative z-10 max-w-7xl mx-auto px-6 py-20">
         <div className="mb-16">
           <h2 className="text-4xl font-bold text-neutral-50 mb-4">
-            Why Choose Exness?
+            Why Choose PaperPip?
           </h2>
           <p className="text-neutral-400 max-w-2xl">
-            Our Exness platform represents the next generation of online trading
+            Our PaperPip platform represents the next generation of online trading
             with cutting-edge technology and user-focused design.
           </p>
         </div>
