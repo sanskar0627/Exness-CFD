@@ -10,6 +10,30 @@ let batchTimer: NodeJS.Timeout | null = null; // in node.js setimeout() return a
 let isShuttingDown = false;
 let isConnected = false; // Track connection state
 
+// ─── Pipeline watchdog ───────────────────────────────────────────────────────
+// The one failure mode that must NEVER happen silently: live prices flowing to
+// Redis while the Kafka→Postgres path is dead (chart history stops updating).
+// If no successful DB write happens for WATCHDOG_LIMIT_MS, we exit(1) and let
+// Docker's `restart: unless-stopped` bring the whole pipeline back up clean.
+const WATCHDOG_LIMIT_MS = 3 * 60 * 1000; // 3 minutes
+let lastDbWriteOk = Date.now(); // grace period from startup
+let watchdogStarted = false;
+
+function startPipelineWatchdog() {
+  if (watchdogStarted) return;
+  watchdogStarted = true;
+  setInterval(() => {
+    if (isShuttingDown) return;
+    const silentFor = Date.now() - lastDbWriteOk;
+    if (silentFor > WATCHDOG_LIMIT_MS) {
+      console.error(
+        `[WATCHDOG] No successful DB write for ${Math.round(silentFor / 1000)}s - pipeline is dead. Exiting so Docker restarts the service.`,
+      );
+      process.exit(1);
+    }
+  }, 30_000);
+}
+
 const kafka = new Kafka({
   clientId: "exness_cfd_consumer",
   brokers: process.env.KAFKA_BROKERS?.split(",") || ["localhost:9092"],
@@ -41,6 +65,23 @@ const consumer = kafka.consumer({
   },
 }); //connect kafka consumer
 
+// CRITICAL: the retry logic in consumer_gr() only covers INITIAL connection
+// failures. If the consumer crashes AFTER consumer.run() is live (rebalance
+// failure, broker restart, KafkaJS-on-Bun edge cases), nothing would restart
+// it and DB writes would stop silently. Crash-fast instead: exit and let
+// Docker restart the container.
+consumer.on(consumer.events.CRASH, (event: any) => {
+  if (isShuttingDown) return;
+  const willRestart = event?.payload?.restart === true;
+  if (!willRestart) {
+    console.error(
+      "[KAFKA] Consumer crashed with non-retriable error - exiting so Docker restarts the service:",
+      event?.payload?.error?.message ?? event,
+    );
+    process.exit(1);
+  }
+});
+
 async function flushBatch() {
   if (batch.length === 0) return; //no trades in batch then do nothing.
   const currentBatch = [...batch];
@@ -48,6 +89,7 @@ async function flushBatch() {
 
   try {
     await writeBatch(currentBatch);
+    lastDbWriteOk = Date.now(); // feed the watchdog
     console.log(` Flushed ${currentBatch.length} trades to database`);
   } catch (error) {
     console.error(" Database write failed:", error);
@@ -71,6 +113,8 @@ export async function consumer_gr() {
 
   // Wait for Kafka to be ready (6 second delay - slightly after producer)
   await new Promise(resolve => setTimeout(resolve, 6000));
+
+  startPipelineWatchdog();
 
   try {
     console.log("Connecting to Kafka consumer...");
