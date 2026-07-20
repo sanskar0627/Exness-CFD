@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import type { SYMBOL } from "../utils/constants";
 import { createTrade, findUserAmount } from "../api/trade";
@@ -23,6 +24,7 @@ export default function BuySell({
   symbol: SYMBOL;
   onOrderPlaced?: () => void;
 }) {
+  const navigate = useNavigate();
   const [orderType, setOrderType] = useState<"market" | "pending">("market");
   const [margin, setMargin] = useState<number | string>(100);
   const [leverage, setLeverage] = useState<number>(1);
@@ -292,31 +294,48 @@ export default function BuySell({
         }
       }
     } catch (err) {
+      // createTrade re-throws backend errors as Error(JSON.stringify(responseData)),
+      // so parse the message to recover the structured error object.
+      let errorData: any = null;
       if (axios.isAxiosError(err)) {
-        // Handle validation errors from backend (contains error + details)
-        const errorData = err.response?.data;
-        let errorMessage = "Failed to place order";
-
-        if (errorData?.error) {
-          errorMessage = errorData.error;
-
-          // If there are validation details, show the first one
-          if (errorData?.details && Array.isArray(errorData.details) && errorData.details.length > 0) {
-            errorMessage = `${errorData.error}: ${errorData.details[0].message}`;
-          }
-        } else if (errorData?.message) {
-          errorMessage = errorData.message;
+        errorData = err.response?.data;
+      } else if (err instanceof Error) {
+        try {
+          errorData = JSON.parse(err.message);
+        } catch {
+          errorData = { error: err.message };
         }
-
-        // Log full error for debugging
-        console.error("Trade error:", errorData);
-
-        setError(errorMessage);
-        setTimeout(() => setError(""), 8000); // Show for 8 seconds for longer error messages
-      } else {
-        setError("An unexpected error occurred");
-        setTimeout(() => setError(""), 3000);
       }
+
+      console.error("Trade error:", errorData);
+
+      // Unverified email: explain and take the user to the verification screen
+      if (errorData?.needsVerification) {
+        setError("Your email is not verified. Redirecting to verification...");
+        try {
+          const balance = await findUserAmount();
+          if (balance?.email) {
+            localStorage.setItem("pendingEmail", balance.email);
+          }
+        } catch {
+          // ignore - verify page will redirect to signin if email is unknown
+        }
+        setTimeout(() => navigate("/verify"), 1500);
+        return;
+      }
+
+      let errorMessage = "Failed to place order";
+      if (errorData?.error) {
+        errorMessage = errorData.error;
+        if (errorData?.details && Array.isArray(errorData.details) && errorData.details.length > 0) {
+          errorMessage = `${errorData.error}: ${errorData.details[0].message}`;
+        }
+      } else if (errorData?.message) {
+        errorMessage = errorData.message;
+      }
+
+      setError(errorMessage);
+      setTimeout(() => setError(""), 8000); // Show for 8 seconds for longer error messages
     } finally {
       setIsSubmitting(false);
     }
