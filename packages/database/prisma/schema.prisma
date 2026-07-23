@@ -32,7 +32,7 @@ model User {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  // OAuth fields
+  // Legacy OAuth fields (kept for backward compat; new lookups use OAuthAccount)
   provider      String?  // "google", "github", or null for email/password
   providerId    String?  // OAuth provider's user ID
   emailVerified Boolean  @default(false)
@@ -42,8 +42,25 @@ model User {
   verificationCode   String?
   verificationExpiry DateTime?
 
+  // Multi-provider OAuth links
+  oauthAccounts OAuthAccount[]
+
   @@index([provider, providerId])
   @@map("users")
+}
+
+// Stores one row per OAuth provider linked to a user (supports multiple providers per account)
+model OAuthAccount {
+  id         Int    @id @default(autoincrement())
+  userId     String
+  provider   String // "google", "github"
+  providerId String
+
+  user       User   @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@unique([provider, providerId])
+  @@index([userId])
+  @@map("oauth_accounts")
 }
 
 // Closed trading positions with PnL

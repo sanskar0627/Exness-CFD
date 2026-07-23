@@ -11,120 +11,168 @@ export interface OAuthProfile {
   avatarUrl?: string;
 }
 
+/**
+ * Ensure the user is loaded into the in-memory trading store.
+ * Called after every successful OAuth resolution so trading endpoints work.
+ */
+function ensureInMemoryStore(user: {
+  userId: string;
+  email: string;
+  password: string;
+  balanceCents: number;
+}) {
+  if (!StoreData.has(user.userId)) {
+    StoreData.set(user.userId, {
+      userId: user.userId,
+      email: user.email,
+      password: user.password || "",
+      balance: { usd_balance: user.balanceCents },
+      assets: {} as Record<Asset, number>,
+    });
+    console.log(`[OAuth] Loaded user ${user.userId} into memory store`);
+  }
+}
+
 export async function findOrCreateOAuthUser(profile: OAuthProfile) {
   console.log(
     `[OAuth] Processing ${profile.provider} login for: ${profile.email}`
   );
 
-  //  check if user exists with this OAuth provider
-  let user = await prisma.user.findFirst({
+  // ──────────────────────────────────────────────────────────────
+  // 1. Check if this exact provider+providerId already linked
+  // ──────────────────────────────────────────────────────────────
+  const existingLink = await prisma.oAuthAccount.findUnique({
     where: {
-      provider: profile.provider,
-      providerId: profile.providerId,
+      provider_providerId: {
+        provider: profile.provider,
+        providerId: profile.providerId,
+      },
     },
+    include: { user: true },
   });
 
-  if (user) {
+  if (existingLink) {
     console.log(
-      `[OAuth] Existing ${profile.provider} user found: ${user.email}`
+      `[OAuth] Existing ${profile.provider} link found for user: ${existingLink.user.email}`
     );
-
-    // Ensure user is in memory store
-    if (!StoreData.has(user.userId)) {
-      StoreData.set(user.userId, {
-        userId: user.userId,
-        email: user.email,
-        password: user.password || "",
-        balance: { usd_balance: user.balanceCents },
-        assets: {} as Record<Asset, number>,
-      });
-      console.log(`[OAuth] Loaded user ${user.userId} into memory store`);
-    }
-
-    return user;
+    ensureInMemoryStore(existingLink.user);
+    return existingLink.user;
   }
 
-  //  Check if email already exists (email/password user)
-  const existingEmailUser = await prisma.user.findUnique({
+  // ──────────────────────────────────────────────────────────────
+  // 2. Check if the email already belongs to an existing account
+  // ──────────────────────────────────────────────────────────────
+  const existingUser = await prisma.user.findUnique({
     where: { email: profile.email },
   });
 
-  if (existingEmailUser) {
-    // Link OAuth to existing account (if no provider set)
-    if (!existingEmailUser.provider) {
-      user = await prisma.user.update({
-        where: { email: profile.email },
+  if (existingUser) {
+    // ── 2a. Verified account (email/password OR another OAuth) → auto-link ──
+    if (existingUser.emailVerified) {
+      await prisma.oAuthAccount.create({
         data: {
+          userId: existingUser.userId,
           provider: profile.provider,
           providerId: profile.providerId,
-          emailVerified: true,
-          avatarUrl: profile.avatarUrl,
         },
       });
-      console.log(
-        `[OAuth] Linked ${profile.provider} to existing user: ${user.email}`
-      );
 
-      // Update memory store
-      const memoryUser = StoreData.get(user.userId);
-      if (memoryUser) {
-        StoreData.set(user.userId, memoryUser);
+      // Update avatar if the user doesn't have one yet
+      if (!existingUser.avatarUrl && profile.avatarUrl) {
+        await prisma.user.update({
+          where: { userId: existingUser.userId },
+          data: { avatarUrl: profile.avatarUrl },
+        });
       }
 
-      return user;
-    } else if (existingEmailUser.provider !== profile.provider) {
-      // User already has different OAuth provider
-      throw new Error(
-        `Email already registered with ${existingEmailUser.provider}. Please sign in with ${existingEmailUser.provider}.`
+      console.log(
+        `[OAuth] Auto-linked ${profile.provider} to verified account: ${existingUser.email}`
       );
-    } else {
-      // Same provider, return existing user
-      return existingEmailUser;
+      ensureInMemoryStore(existingUser);
+      return existingUser;
     }
+
+    // ── 2b. Unverified email/password account → claim it via OAuth ──
+    //    OAuth email is provider-verified, so this is safe.
+    const updated = await prisma.user.update({
+      where: { userId: existingUser.userId },
+      data: {
+        emailVerified: true,
+        verificationCode: null,
+        verificationExpiry: null,
+        avatarUrl: profile.avatarUrl || existingUser.avatarUrl,
+      },
+    });
+
+    await prisma.oAuthAccount.create({
+      data: {
+        userId: existingUser.userId,
+        provider: profile.provider,
+        providerId: profile.providerId,
+      },
+    });
+
+    console.log(
+      `[OAuth] Claimed unverified account and linked ${profile.provider}: ${updated.email}`
+    );
+    ensureInMemoryStore(updated);
+    return updated;
   }
 
-  // 3. Create new user
+  // ──────────────────────────────────────────────────────────────
+  // 3. Brand-new user → create account + OAuth link
+  // ──────────────────────────────────────────────────────────────
   const userId = uuidv4();
   const initialBalance = 500000; // $5000 in cents
 
-  user = await prisma.user.create({
+  const newUser = await prisma.user.create({
     data: {
       userId,
       email: profile.email,
-      password: "", // Empty string for OAuth users (not null for compatibility)
+      password: "", // No password for pure OAuth users
       balanceCents: initialBalance,
-      provider: profile.provider,
-      providerId: profile.providerId,
-      emailVerified: true, // OAuth emails are verified
+      provider: profile.provider,      // legacy field (first provider used)
+      providerId: profile.providerId,  // legacy field
+      emailVerified: true,
       avatarUrl: profile.avatarUrl,
     },
   });
 
-  // 4. Add to in-memory store
+  await prisma.oAuthAccount.create({
+    data: {
+      userId,
+      provider: profile.provider,
+      providerId: profile.providerId,
+    },
+  });
+
+  // Add to in-memory trading store
   CreateUser(userId, profile.email, "");
 
-  console.log(`[OAuth] Created new ${profile.provider} user: ${user.email}`);
-  return user;
+  console.log(`[OAuth] Created new ${profile.provider} user: ${newUser.email}`);
+  return newUser;
 }
 
 /**
- * Check if user is an OAuth user (for signin validation)
+ * Check if user is an OAuth user (for signin validation).
+ * Returns all linked providers so the error message can list them.
  */
-export async function isOAuthUser(
+export async function getLinkedProviders(
   email: string
-): Promise<{ isOAuth: boolean; provider?: string }> {
+): Promise<string[]> {
   const user = await prisma.user.findUnique({
     where: { email },
-    select: { provider: true },
+    include: { oauthAccounts: { select: { provider: true } } },
   });
 
-  if (!user) {
-    return { isOAuth: false };
+  if (!user) return [];
+
+  const providers = user.oauthAccounts.map((a) => a.provider);
+
+  // Fallback: if legacy provider field is set but no OAuthAccount rows exist yet
+  if (providers.length === 0 && user.provider) {
+    return [user.provider];
   }
 
-  if (user.provider) {
-    return { isOAuth: true, provider: user.provider };
-  }
-
-  return { isOAuth: false };
+  return providers;
 }

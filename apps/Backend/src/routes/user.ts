@@ -15,6 +15,7 @@ import {
   sendVerificationEmail,
   isEmailConfigured,
 } from "../services/emailService";
+import { getLinkedProviders } from "../services/oauthService";
 
 const UUID_NAMESPACE = "6ba7b810-9dad-11d1-80b4-00c04fd430c8";
 export const userRouter = Router(); // To organise ROutes
@@ -37,15 +38,44 @@ userRouter.post(
       }
       const exsistingUser = await prisma.user.findUnique({ where: { email } });
       if (exsistingUser) {
-        // A registered-but-NEVER-verified email/password account doesn't own
-        // the email yet — let the person sign up again: reset the password,
-        // issue a fresh code, and resend the verification email.
+        // ── Case A: OAuth-only user adding email/password login ──
+        // If the account exists, is verified, and has no password set,
+        // let them add a password to their existing account.
+        const isOAuthOnly =
+          exsistingUser.emailVerified &&
+          (!exsistingUser.password || exsistingUser.password === "");
+
+        if (isOAuthOnly) {
+          console.log(`[SIGNUP] Adding password to OAuth account: ${email}`);
+          const hashedPw = hashPassword(password);
+          await prisma.user.update({
+            where: { email },
+            data: { password: hashedPw },
+          });
+
+          // Ensure memory store is up to date
+          if (!findUSerId(exsistingUser.userId)) {
+            CreateUser(exsistingUser.userId, email, hashedPw, exsistingUser.balanceCents);
+          }
+
+          const token = generateToken(exsistingUser.userId);
+          res.status(200).json({
+            message: "Password added to your account. You can now sign in with email or OAuth.",
+            userId: exsistingUser.userId,
+            token,
+            needsVerification: false,
+          });
+          return;
+        }
+
+        // ── Case B: Unverified email/password account ──
+        // Let the person re-signup: reset password, send new code.
         const canRetake =
           !exsistingUser.emailVerified && !exsistingUser.provider;
 
         if (!canRetake) {
           console.log(`[SIGNUP] User already exists: ${email}`);
-          res.status(409).json({ error: "User already exists" });
+          res.status(409).json({ error: "User already exists. Try signing in instead." });
           return;
         }
 
@@ -147,11 +177,13 @@ userRouter.post("/signin", authRateLimit, async (req: Request, res: Response): P
       return;
     }
 
-    // Check if user is an OAuth user (has provider but empty/no password)
-    if (user.provider && (!user.password || user.password === "")) {
-      console.log(`[SIGNIN] OAuth user attempting password login: ${email}`);
-      res.status(401).json({ 
-        error: `This account uses ${user.provider} login. Please sign in with ${user.provider}.` 
+    // If the account has no password set (pure OAuth user), tell them which providers to use
+    if (!user.password || user.password === "") {
+      const providers = await getLinkedProviders(email);
+      const providerList = providers.length > 0 ? providers.join(" or ") : "OAuth";
+      console.log(`[SIGNIN] OAuth-only user attempting password login: ${email}`);
+      res.status(401).json({
+        error: `This account uses ${providerList} login. Please sign in with ${providerList}.`
       });
       return;
     }
